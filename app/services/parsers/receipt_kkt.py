@@ -52,12 +52,25 @@ class ReceiptKKTParser(BaseParser):
         return None
 
     def _find_qr_in_image(self, image: Image.Image) -> str | None:
-        """Find QR code in image using OpenCV"""
+        """Find a receipt QR code in an image.
+
+        zbar is tried first: OpenCV's detector silently returns nothing for
+        some perfectly valid receipt QRs.
+        """
+        try:
+            from pyzbar.pyzbar import decode as zb_decode
+
+            for found in zb_decode(image):
+                text = found.data.decode("utf-8", errors="ignore")
+                if "fn=" in text and "fp=" in text:
+                    return text
+        except Exception:
+            pass
+
         try:
             import cv2
             cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-            detector = cv2.QRCodeDetector()
-            data, bbox, _ = detector.detectAndDecode(cv_image)
+            data, _bbox, _ = cv2.QRCodeDetector().detectAndDecode(cv_image)
             if data and ("t=" in data or "fn=" in data):
                 return data
         except Exception:

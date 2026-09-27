@@ -19,31 +19,52 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 
-def _find_qr_string(data: bytes) -> str | None:
-    """Locate the receipt QR payload in an image or PDF.
+def _decode_qr(image) -> str | None:
+    """Try pyzbar first, then OpenCV.
 
-    Tries OpenCV's detector; falls back to scanning the raw bytes for the
-    characteristic `t=...&s=...&fn=...&i=...&fp=...` pattern.
+    OpenCV's detector silently fails on some receipt QRs that zbar reads
+    without trouble, so it is only a backup.
     """
+    try:
+        from pyzbar.pyzbar import decode as zb_decode
+
+        for found in zb_decode(image):
+            text = found.data.decode("utf-8", errors="ignore")
+            if "fn=" in text and "fp=" in text:
+                return text
+    except Exception:
+        pass
+
     try:
         import cv2
         import numpy as np
+
+        arr = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2BGR)
+        text, _, _ = cv2.QRCodeDetector().detectAndDecode(arr)
+        if text and "fn=" in text and "fp=" in text:
+            return text
+    except Exception:
+        pass
+
+    return None
+
+
+def _find_qr_string(data: bytes) -> str | None:
+    """Locate the receipt QR payload in an image or PDF."""
+    try:
         from PIL import Image
         import io
 
         if data[:4] == b"%PDF":
             from app.services.ocr import ocr_service
 
-            pages = ocr_service.pdf_to_images(data)
-            images = pages
+            images = ocr_service.pdf_to_images(data)
         else:
             images = [Image.open(io.BytesIO(data))]
 
-        detector = cv2.QRCodeDetector()
         for image in images:
-            arr = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2BGR)
-            text, _, _ = detector.detectAndDecode(arr)
-            if text and "fn=" in text and "fp=" in text:
+            text = _decode_qr(image)
+            if text:
                 return text
     except Exception:
         pass
@@ -61,6 +82,29 @@ def _find_qr_string(data: bytes) -> str | None:
             return candidate
 
     return None
+
+
+def _payload_from_qr(qr: str, warning: str) -> dict:
+    """Build a partial receipt payload from the QR string alone.
+
+    The QR carries date, total, fiscal number, document number and signature.
+    Seller name, address and item lines only come from the FNS response, so the
+    result is flagged `complete: False`.
+    """
+    from app.services.fn_api import fns_client
+
+    fields = fns_client.parse_qr_string(qr)
+    return {
+        "fiscal_number": fields.get("fiscal_number"),
+        "fiscal_document_number": fields.get("fiscal_document_number"),
+        "fiscal_sign": fields.get("fiscal_sign"),
+        "date_time": fields.get("date_time"),
+        "total_sum": fields.get("sum"),
+        "seller": None,
+        "items": [],
+        "note": "Seller details and item lines require a FNS lookup.",
+        "warning": warning,
+    }
 
 
 async def _parse(path: pathlib.Path, raw_text: bool) -> dict:
@@ -88,11 +132,19 @@ async def _parse(path: pathlib.Path, raw_text: bool) -> dict:
                 result.pop("data", None)
             return result
         except FNSApiError as exc:
-            result["method"] = "ocr"
-            result["warning"] = f"FNS lookup failed ({exc.code}): {exc.message}"
+            result["method"] = "qr"
+            result["warning"] = f"FNS rejected the receipt ({exc.code}): {exc.message}"
         except Exception as exc:
-            result["method"] = "ocr"
-            result["warning"] = f"FNS lookup error: {type(exc).__name__}: {exc}"
+            result["method"] = "qr"
+            result["warning"] = f"FNS unavailable: {type(exc).__name__}"
+
+        # FNS did not answer, but the QR itself already carries the requisites.
+        result["document_type"] = "receipt_kkt"
+        result["data"] = _payload_from_qr(qr, result["warning"])
+        result["complete"] = False
+        if raw_text:
+            result["data"] = {"raw_text": qr}
+        return result
 
     # OCR fallback
     try:
@@ -138,6 +190,16 @@ def _summarise(result: dict) -> str:
             )
         if len(items) > 8:
             lines.append(f"   ... ещё {len(items) - 8}")
+    elif method == "qr":
+        data = result.get("data", {})
+        lines.append(f"ФН:        {data.get('fiscal_number') or '—'}")
+        lines.append(f"ФД:        {data.get('fiscal_document_number') or '—'}")
+        lines.append(f"ФП:        {data.get('fiscal_sign') or '—'}")
+        lines.append(f"Дата:      {data.get('date_time') or '—'}")
+        lines.append(f"Итого:     {data.get('total_sum') or '—'} руб")
+        lines.append("Продавец:  недоступно без ответа ФНС")
+        if result.get("warning"):
+            lines.append(f"Внимание:  {result['warning']}")
     else:
         if result.get("warning"):
             lines.append(f"Внимание:  {result['warning']}")

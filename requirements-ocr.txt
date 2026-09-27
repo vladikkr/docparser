@@ -8,5 +8,8 @@ opencv-python-headless>=4.8
 pdf2image>=1.16
 python-magic>=0.4.27
 
+# Receipt QR decoding. zbar reads receipt QRs that OpenCV's detector misses.
+pyzbar>=0.1.9
+
 # Optional billing (only needed for live subscriptions)
 stripe>=7.0
