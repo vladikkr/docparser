@@ -25,10 +25,19 @@ from app.schemas import (
 
 logger = structlog.get_logger()
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
-stripe.api_version = settings.STRIPE_API_VERSION
+if settings.STRIPE_SECRET_KEY:
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    stripe.api_version = settings.STRIPE_API_VERSION
 
 router = APIRouter(prefix="/billing", tags=["billing"])
+
+
+def _require_stripe() -> None:
+    if not settings.stripe_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Billing is not configured on this deployment",
+        )
 
 
 PLANS = {
@@ -154,6 +163,7 @@ async def create_checkout_session(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    _require_stripe()
     if user.tier == PlanType.FREE and request.price_id == settings.STRIPE_PRICE_FREE:
         raise ValidationError("Already on free plan")
 
@@ -188,6 +198,7 @@ async def create_portal_session(
     request: CustomerPortalRequest,
     user: User = Depends(get_current_user),
 ):
+    _require_stripe()
     if not user.stripe_customer_id:
         raise ValidationError("No billing account found")
 
@@ -281,6 +292,7 @@ async def list_invoices(
     user: User = Depends(get_current_user),
     limit: int = 10,
 ):
+    _require_stripe()
     if not user.stripe_customer_id:
         return []
 

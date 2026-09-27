@@ -14,7 +14,8 @@ from app.services.stripe_service import handle_stripe_event
 
 logger = structlog.get_logger()
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
+if settings.STRIPE_SECRET_KEY:
+    stripe.api_key = settings.STRIPE_SECRET_KEY
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 

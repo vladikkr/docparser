@@ -10,8 +10,13 @@ from app.models import Subscription, User, UserTier
 
 logger = structlog.get_logger()
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
-stripe.api_version = settings.STRIPE_API_VERSION
+# Stripe is optional: without a key the billing endpoints report "not configured"
+# instead of crashing the app at import time.
+if settings.STRIPE_SECRET_KEY:
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    stripe.api_version = settings.STRIPE_API_VERSION
+else:
+    logger.warning("stripe_not_configured", hint="set STRIPE_SECRET_KEY to enable billing")
 
 
 TIER_BY_PRICE = {

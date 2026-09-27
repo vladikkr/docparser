@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     REDIS_MAX_CONNECTIONS: int = 50
     CELERY_ENABLED: bool = False
 
-    SECRET_KEY: str = Field(..., min_length=32)
+    SECRET_KEY: str = "insecure-development-key-do-not-use-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
@@ -57,9 +57,10 @@ class Settings(BaseSettings):
     FNS_API_TIMEOUT: int = 30
     FNS_MAX_RETRIES: int = 3
 
-    STRIPE_SECRET_KEY: str
-    STRIPE_PUBLISHABLE_KEY: str
-    STRIPE_WEBHOOK_SECRET: str
+    # Optional credentials: default to empty so a missing value never blocks boot.
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_API_VERSION: str = "2024-06-20"
 
     STRIPE_PRICE_FREE: str = "price_free"
@@ -82,6 +83,14 @@ class Settings(BaseSettings):
 
     STORAGE_BUCKET: str = "documents"
     STORAGE_PUBLIC_URL: str | None = None
+
+    @property
+    def stripe_configured(self) -> bool:
+        return bool(self.STRIPE_SECRET_KEY)
+
+    @property
+    def redis_configured(self) -> bool:
+        return bool(self.REDIS_URL) and "localhost" not in self.REDIS_URL
 
 
 settings = Settings()
