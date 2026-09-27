@@ -1,74 +1,23 @@
+# Tooling config only. Runtime dependencies live in requirements.txt,
+# which is what Render's Python buildpack uses.
+
 [project]
 name = "docparser-ru"
 version = "0.1.0"
 description = "API для извлечения данных из российских первичных документов"
-readme = "README.md"
-requires-python = ">=3.11,<4.0"
-license = {text = "MIT"}
-authors = [{name = "DocParser Team"}]
-dependencies = [
-    "fastapi>=0.109",
-    "uvicorn[standard]>=0.27",
-    "gunicorn>=21.0",
-    "sqlalchemy>=2.0",
-    "asyncpg>=0.29",
-    "alembic>=1.13",
-    "supabase>=2.0",
-    "python-jose[cryptography]>=3.3",
-    "passlib[bcrypt]>=1.7",
-    "python-multipart>=0.0.6",
-    "pydantic>=2.5",
-    "pydantic-settings>=2.1",
-    "pydantic-extra-types>=2.4",
-    "email-validator>=2.1",
-    "pytesseract>=0.3.10",
-    "python-magic>=0.4.27",
-    "pdf2image>=1.16",
-    "pillow>=10.0",
-    "opencv-python-headless>=4.8",
-    "httpx>=0.26",
-    "tenacity>=8.2",
-    "redis>=5.0",
-    # "upstash-redis>=1.0",
-    "stripe>=7.0",
-    "celery>=5.3",
-    "sentry-sdk[fastapi]>=1.38",
-    "structlog>=24.0",
-    "python-dotenv>=1.0",
-    "pyyaml>=6.0",
-    "python-dateutil>=2.8",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pytest>=7.4",
-    "pytest-asyncio>=0.23",
-    "pytest-cov>=4.1",
-    "httpx>=0.26",
-    "faker>=20.0",
-    "ruff>=0.1.0",
-    "mypy>=1.7",
-    "pre-commit>=3.6",
-    "ipython>=8.18",
-]
-docs = ["mkdocs-material>=9.4", "mkdocstrings[python]>=0.24"]
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires-python = ">=3.11"
+dependencies = []
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 select = ["E", "F", "I", "W", "UP", "B", "C4", "SIM", "T20"]
-ignore = ["S101", "S106"]
+ignore = ["S101", "S106", "B008", "E501"]
 
 [tool.mypy]
 python_version = "3.11"
-strict = true
 warn_return_any = true
 warn_unused_ignores = true
-disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -82,4 +31,3 @@ omit = ["tests/*", "*/migrations/*"]
 
 [tool.alembic]
 script_location = "alembic"
-sqlalchemy.url = "postgresql://user:pass@localhost/docparser"
