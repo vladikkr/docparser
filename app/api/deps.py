@@ -103,12 +103,14 @@ async def get_tier_limit(user: User = Depends(get_current_user)) -> int:
     return TIER_LIMITS.get(user.tier.value, settings.RATE_LIMIT_FREE)
 
 
-async def require_tier(*allowed_tiers: UserTier):
-    """Dependency to require specific tier(s)"""
+def require_tier(*allowed_tiers: UserTier):
+    """Build a dependency that only allows the given tiers."""
+
     async def check_tier(user: User = Depends(get_current_user)) -> User:
         if user.tier not in allowed_tiers:
             raise AuthorizationError(f"Requires one of: {[t.value for t in allowed_tiers]}")
         return user
+
     return check_tier
 
 

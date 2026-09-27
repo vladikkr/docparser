@@ -26,12 +26,20 @@ ALIASES = {
 # Imports intentionally optional: guarded by try/except or lazy loaders.
 OPTIONAL = {"magic", "PIL", "cv2", "pytesseract", "pdf2image", "numpy", "sentry_sdk"}
 
+# Transitive requirements that are easy to forget because no project module
+# imports them directly. SQLAlchemy raises at runtime when these are missing.
+REQUIRED_RUNTIMES = {
+    "greenlet": "needed by SQLAlchemy async engine (use sqlalchemy[asyncio])",
+    "aiosqlite": "only for SQLite; production uses asyncpg",
+}
 
-def declared_packages() -> set[str]:
+
+def declared_packages(path: pathlib.Path | None = None) -> set[str]:
+    target = path or REQUIREMENTS
     packages = set()
-    for line in REQUIREMENTS.read_text(encoding="utf-8").splitlines():
+    for line in target.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith("#") or line.startswith("-r"):
             continue
         name = re.split(r"[<>=!~\[; ]", line)[0]
         packages.add(name.lower().replace("_", "-"))
@@ -56,6 +64,7 @@ def third_party_imports() -> set[tuple[str, str, int]]:
 
 def main() -> int:
     declared = declared_packages()
+    dev_declared = declared_packages(REQUIREMENTS.parent / "requirements-dev.txt")
     missing: list[str] = []
 
     for module, path, lineno in sorted(third_party_imports()):
@@ -65,6 +74,13 @@ def main() -> int:
         if module in OPTIONAL:
             continue
         missing.append(f"{module} ({path}:{lineno}) -> add '{key}' to requirements.txt")
+
+    for package, reason in REQUIRED_RUNTIMES.items():
+        key = package.lower().replace("_", "-")
+        if key in declared or key in dev_declared:
+            continue
+        scope = "requirements-dev.txt" if package == "aiosqlite" else "requirements.txt"
+        missing.append(f"{package} -> add to {scope} ({reason})")
 
     if missing:
         print("Missing dependencies:\n")
