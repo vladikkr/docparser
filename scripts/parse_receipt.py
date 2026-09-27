@@ -210,6 +210,10 @@ def _summarise(result: dict) -> str:
             lines.append(
                 f"   ВНИМАНИЕ: сумма позиций {data.get('items_sum')} не совпадает с итогом"
             )
+        if not data.get("trustworthy"):
+            lines.append(
+                "   ВНИМАНИЕ: цифры НЕ подтверждены второй строкой чека — сверьте вручную"
+            )
         if result.get("warning"):
             lines.append(f"Внимание:  {result['warning']}")
     elif method == "qr":

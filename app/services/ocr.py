@@ -6,9 +6,12 @@ can boot on constrained hosts. Import errors surface only when OCR is used.
 
 import io
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
+
+from PIL import Image
 
 import structlog
 
@@ -67,6 +70,53 @@ def available_languages() -> list[str]:
         return []
 
 
+# Words that only appear on a document, used to judge whether an OCR pass
+# produced something usable rather than noise.
+_RECEIPT_MARKERS = (
+    "ИТОГО",
+    "К ОПЛАТЕ",
+    "СУММА",
+    "НАЛИЧНЫМИ",
+    "ПОЗИЦИЯ",
+    "КАТИР",
+    "УНП",
+    "РН СККО",
+    "КАССИР",
+    "ЧЕК",
+    "ТОВАР",
+    "ЦЕНА",
+    "КОЛИЧЕСТВО",
+    "ПРОДУКТ",
+    "ОПЛАТА",
+    "ИТОГ",
+    "TOTAL",
+    "SUBTOTAL",
+    "CASH",
+)
+
+# A handful of markers plus real words is enough to trust a pass.
+_GOOD_ENOUGH_SCORE = 3
+
+
+def _receipt_score(text: str) -> int:
+    """Rank OCR output by how much it looks like a document rather than noise."""
+    if not text:
+        return 0
+    lowered = text.lower()
+    markers = sum(1 for m in _RECEIPT_MARKERS if m.lower() in lowered)
+
+    # Reward readable word density, penalise lines that are pure noise.
+    words = re.findall(r"[A-Za-zА-Яа-яЁёІіЎў]{3,}", text)
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    density = 0
+    if lines:
+        readable = sum(1 for ln in lines if len(re.findall(r"[A-Za-zА-Яа-яЁёІіЎ]{3,}", ln)) >= 2)
+        density = readable
+
+    return markers + (1 if len(words) >= 5 else 0) + (1 if density >= 2 else 0)
+
+
+
 def ocr_available() -> bool:
     try:
         _optional_import("pytesseract", "OCR")
@@ -86,6 +136,97 @@ class OCRService:
             return _optional_import("cv2", "OpenCV")
         except RuntimeError:
             return None
+
+    def _run(self, pytesseract: Any, image: Any) -> str:
+        return pytesseract.image_to_string(
+            self.preprocess_image(image), config=self.tesseract_config
+        ).strip()
+
+    def _best_rotation(self, pytesseract: Any, image: Any, baseline: str) -> str:
+        """Retry the image at right angles.
+
+        A receipt photographed sideways yields nothing at all with the default
+        page segmentation, so each quarter turn is tried and the most
+        receipt-like result wins.
+        """
+        best = baseline
+        best_score = _receipt_score(baseline)
+        if best_score >= _GOOD_ENOUGH_SCORE:
+            return best
+
+        try:
+            import cv2
+            import numpy as np
+        except RuntimeError:
+            return best
+
+        arr = np.array(image.convert("RGB"))
+        for turn in (cv2.ROTATE_90_CLOCKWISE, cv2.ROTATE_180, cv2.ROTATE_90_COUNTERCLOCKWISE):
+            rotated = cv2.rotate(arr, turn)
+            try:
+                text = pytesseract.image_to_string(
+                    self.preprocess_image(Image.fromarray(rotated)),
+                    config=self.tesseract_config,
+                ).strip()
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("ocr_rotation_failed", error=str(exc))
+                continue
+            score = _receipt_score(text)
+            if score > best_score:
+                best, best_score = text, score
+            if best_score >= _GOOD_ENOUGH_SCORE:
+                break
+        return best
+
+    def _best_tiled(self, pytesseract: Any, image: Any, baseline: str) -> str:
+        """Split a wide frame into bands for receipts that sit small inside it.
+
+        A cropped photo often leaves the receipt occupying a fraction of the
+        frame, which puts the text below Tesseract's comfortable resolution.
+        """
+        best = baseline
+        best_score = _receipt_score(baseline)
+        if best_score >= _GOOD_ENOUGH_SCORE:
+            return best
+
+        width, height = image.size
+        bands = 3
+        overlap = 0.12
+        step = height / bands
+        chunk = int(step * (1 + overlap))
+        chunks: list[str] = []
+        for i in range(bands):
+            top = max(0, int(i * step))
+            bottom = min(height, top + chunk)
+            if bottom - top < 40:
+                continue
+            try:
+                text = self._run(pytesseract, image.crop((0, top, width, bottom)))
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("ocr_band_failed", error=str(exc))
+                continue
+            if text:
+                chunks.append(text)
+        if not chunks:
+            return best
+
+        joined = "\n".join(chunks)
+        score = _receipt_score(joined)
+        if score > best_score:
+            best = joined
+        return best
+
+    def extract_full_text(self, image: Any) -> str:
+        pytesseract = _optional_import("pytesseract", "OCR")
+        _configure_pytesseract(pytesseract)
+        try:
+            text = self._run(pytesseract, image)
+            text = self._best_rotation(pytesseract, image, text)
+            text = self._best_tiled(pytesseract, image, text)
+            return text
+        except Exception as exc:
+            logger.error("extract_full_text_failed", error=str(exc))
+            return ""
 
     def preprocess_image(self, image: Any) -> Any:
         """Deskew, denoise and boost contrast. Returns a PIL image."""
@@ -171,17 +312,6 @@ class OCRService:
 
     def extract_text_from_pdf(self, pdf_bytes: bytes) -> List[List[Tuple[str, float, List[List[int]]]]]:
         return [self.extract_text(img) for img in self.pdf_to_images(pdf_bytes)]
-
-    def extract_full_text(self, image: Any) -> str:
-        pytesseract = _optional_import("pytesseract", "OCR")
-        _configure_pytesseract(pytesseract)
-        try:
-            return pytesseract.image_to_string(
-                self.preprocess_image(image), config=self.tesseract_config
-            ).strip()
-        except Exception as exc:
-            logger.error("extract_full_text_failed", error=str(exc))
-            return ""
 
     def extract_full_text_from_pdf(self, pdf_bytes: bytes) -> str:
         pages = self.extract_text_from_pdf(pdf_bytes)

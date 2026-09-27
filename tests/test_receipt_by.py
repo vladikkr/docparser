@@ -135,3 +135,66 @@ class TestDegradation:
     def test_country_and_type(self, receipt: dict) -> None:
         assert receipt["country"] == "BY"
         assert receipt["document_type"] == "receipt_kkt"
+
+
+class TestTrustworthiness:
+    """A wrong number must never look trustworthy.
+
+    OCR on a damaged photo turned `ИТОГО К ОПЛАТЕ 20,00` into noise ending in
+    `, 90`, and the parser reported 90.00 as correct with a green flag. These
+    tests pin that failure shut.
+    """
+
+    def test_healthy_receipt_is_trustworthy(self, receipt: dict) -> None:
+        assert receipt["trustworthy"] is True
+        assert receipt["totals_agree"] is True
+        assert receipt["total_lines"] >= 2
+
+    def test_disagreeing_totals_are_flagged(self) -> None:
+        text = (
+            "УНП 790730816\nПозиция 1\n1,000х20,00 20,00\n"
+            "ИТОГО К ОПЛАТЕ 25,00\nСумма наличными 20,00\n"
+        )
+        result = parse_belarusian_receipt(text)
+        assert result["totals_agree"] is False
+        assert result["trustworthy"] is False
+
+    def test_total_without_decimals_is_rejected(self) -> None:
+        # Thermal receipts always print two decimals; a bare integer is noise.
+        result = parse_belarusian_receipt("УНП 790730816\nИТОГО К ОПЛАТЕ 90\n")
+        assert result["total_sum"] is None
+
+    def test_orphan_decimal_fragment_is_rejected(self) -> None:
+        # A cropped band of the photo can leave `,00` behind.
+        result = parse_belarusian_receipt("УНП 790730816\nИТОГО К ОПЛАТЕ ,00\n")
+        assert result["total_sum"] is None
+
+    def test_single_uncorroborated_total_is_not_trusted(self) -> None:
+        # One total line and no line items: nothing verifies the figure.
+        result = parse_belarusian_receipt(
+            "ИП Рощина Татьяна\nУНП 790730816\nИТОГО К ОПЛАТЕ 0,00\n"
+        )
+        assert result["total_sum"] == 0.0
+        assert result["total_lines"] == 1
+        assert result["trustworthy"] is False
+
+    def test_reconciled_is_unknown_without_items(self) -> None:
+        result = parse_belarusian_receipt(
+            "УНП 790730816\nИТОГО К ОПЛАТЕ 20,00\nСумма наличными 20,00\n"
+        )
+        assert result["items"] == []
+        # Vacuously "equal" would be a lie: there is nothing to compare against.
+        assert result["reconciled"] is None
+        # Two separately printed totals agreeing is real corroboration.
+        assert result["trustworthy"] is True
+
+    def test_item_sum_mismatch_is_not_trusted(self) -> None:
+        text = (
+            "УНП 790730816\nПозиция 1\nМолоко 2,000х3,00 6,00\n"
+            "ИТОГО К ОПЛАТЕ 20,00\n"
+        )
+        result = parse_belarusian_receipt(text)
+        assert result["items"]
+        assert result["reconciled"] is False
+        assert result["trustworthy"] is False
+

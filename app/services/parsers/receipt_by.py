@@ -45,7 +45,18 @@ _TRANSLIT = str.maketrans(
     }
 )
 
-_SUM_RE = re.compile(r"(\d[\d\s.,]*\d|\d)")
+_MONEY_RE = re.compile(r"(\d[\d\s.,]*\d|\d)")
+_SUM_RE = _MONEY_RE
+
+
+def _looks_like_amount(raw: str) -> bool:
+    """Receipt amounts always carry two decimals, e.g. `20,00`.
+
+    A bare integer on a total line is almost always an OCR artefact, and so is a
+    fragment such as `,00` left behind when a band of the photo is cut short.
+    Both are rejected: a real amount has digits on each side of the separator.
+    """
+    return bool(re.search(r"\d\s*[.,]\s*\d{1,2}\s*$", raw.strip()))
 
 
 def _digits(value: str) -> str:
@@ -165,12 +176,15 @@ def _seller(lines: list[str]) -> dict[str, str | None]:
 
 
 
-def _find_total(lines: list[str]) -> float | None:
-    """Prefer the payment total over the cash tendered line."""
-    for labels in (
+def _total_candidates(lines: list[str]) -> list[tuple[str, float, bool]]:
+    """Every amount found on a total-like line, with a decimals flag."""
+    groups = (
         ("ИТОГО К ОПЛАТЕ", "ИТОГО", "ВСЕГО К ОПЛАТЕ"),
         ("Сумма наличными",),
-    ):
+        ("Наличными",),
+    )
+    found: list[tuple[str, float, bool]] = []
+    for labels in groups:
         for line in lines:
             if not _has_label(line, labels):
                 continue
@@ -180,12 +194,45 @@ def _find_total(lines: list[str]) -> float | None:
                 idx = canon.lower().find(needle)
                 if idx == -1:
                     continue
-                match = _SUM_RE.search(line[idx + len(label) :])
-                if match:
-                    amount = _money(match.group(1))
-                    if amount is not None:
-                        return amount
-    return None
+                match = _MONEY_RE.search(line[idx + len(label) :])
+                if not match:
+                    continue
+                raw = match.group(1)
+                amount = _money(raw)
+                if amount is None:
+                    continue
+                # One amount per line: `ИТОГО К ОПЛАТЕ` also contains `ИТОГО`,
+                # and counting it twice would fake corroboration.
+                found.append((labels[0], amount, _looks_like_amount(raw)))
+                break
+    return found
+
+
+def _find_total(lines: list[str]) -> tuple[float | None, bool | None, int]:
+    """Return the payment total, whether the printed totals agree, and how many
+    independent total lines were readable.
+
+    Two independent lines usually carry the same figure (`ИТОГО К ОПЛАТЕ` and
+    `Сумма наличными`). When they disagree the OCR mistook something, so the
+    caller is told rather than handed a confident wrong number. The count matters
+    too: a single readable total is not corroborated by anything.
+
+    Only amounts written with decimals are accepted. Thermal printers always
+    print two, so a bare integer on a total line is an OCR artefact — taking it
+    at face value is how `20,00` once turned into `90`.
+    """
+    candidates = [c for c in _total_candidates(lines) if c[2]]
+    if not candidates:
+        return None, None, 0
+
+    payment = next((c[1] for c in candidates if c[0] == "ИТОГО К ОПЛАТЕ"), None)
+    if payment is None:
+        payment = candidates[0][1]
+
+    distinct = {c[1] for c in candidates}
+    agree = True if len(distinct) == 1 else False
+    return payment, agree, len(candidates)
+
 
 
 
@@ -320,14 +367,26 @@ def parse_belarusian_receipt(text: str, ui_hint: str | None = None) -> dict[str,
     if not lines:
         return {"country": "BY", "complete": False, "error": "no text recognised"}
 
-    total = _find_total(lines)
+    total, totals_agree, total_lines = _find_total(lines)
     items = _find_items(lines, total)
     seller = _seller(lines)
     when = _find_datetime(lines)
 
     parsed_sum = sum(r["sum"] for r in items if r.get("sum"))
-    # The total line is authoritative; item arithmetic can drift after OCR.
-    reconciled = total is not None and (not items or abs(parsed_sum - total) < 0.01)
+    if items:
+        # With no line items there is nothing to check the total against, so
+        # reconciliation is unknown rather than passed.
+        reconciled: bool | None = abs(parsed_sum - total) < 0.01 if total is not None else None
+    else:
+        reconciled = None
+
+    # A total is believed when either the line items add up to it, or two
+    # separately printed totals agree. One uncorroborated line is not enough:
+    # that is exactly the shape of a silent misread.
+    verified = reconciled is True
+    corroborated = totals_agree is True and total_lines >= 2
+    trustworthy = bool(total is not None and (verified or corroborated))
+
 
     return {
         "country": "BY",
@@ -343,8 +402,11 @@ def parse_belarusian_receipt(text: str, ui_hint: str | None = None) -> dict[str,
         "items": items,
         "ui": _find_ui(lines, ui_hint),
         "complete": bool(total is not None and seller["name"] and seller["unp"]),
-        "items_sum": round(parsed_sum, 2) if items else None,
+        "trustworthy": trustworthy,
+        "totals_agree": totals_agree,
+        "total_lines": total_lines,
         "reconciled": reconciled,
+        "items_sum": round(parsed_sum, 2) if items else None,
         "raw_text": text,
     }
 
