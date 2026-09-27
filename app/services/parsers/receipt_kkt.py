@@ -12,6 +12,15 @@ from app.services.parsers.base import BaseParser
 logger = structlog.get_logger()
 
 
+def _is_fiscal_qr(qr_string: str) -> bool:
+    """A Russian fiscal QR carries the fiscal number and signature.
+
+    Belarusian receipts put only a unique document id in the QR, and that token
+    must not be sent to the FNS API.
+    """
+    return "fn=" in qr_string and "fp=" in qr_string
+
+
 class ReceiptKKTParser(BaseParser):
     """Parser for Russian KKT receipts (ФЗ-54)"""
 
@@ -23,7 +32,7 @@ class ReceiptKKTParser(BaseParser):
         # Try to extract QR code from image/PDF
         qr_string = await self._extract_qr_string(file_bytes)
 
-        if qr_string:
+        if qr_string and _is_fiscal_qr(qr_string):
             # Validate via FNS API
             try:
                 receipt = await validate_receipt_by_qr(qr_string)
@@ -31,9 +40,33 @@ class ReceiptKKTParser(BaseParser):
             except FNSApiError as e:
                 logger.warning("fns_validation_failed", error=e.message, code=e.code)
                 # Fall back to OCR parsing
+        elif qr_string:
+            # Belarusian receipt: the QR holds a bare document id, and the
+            # register lives with the Ministry of Finance of Belarus.
+            return await self._parse_belarusian(file_bytes, qr_string)
 
         # Fallback: OCR parsing
         return await self._parse_via_ocr(file_bytes)
+
+    async def _parse_belarusian(self, file_bytes: bytes, ui: str) -> dict[str, Any]:
+        """Belarusian receipts are read from the printed text."""
+        from app.services.parsers.receipt_by import parse_belarusian_receipt
+
+        try:
+            if file_bytes.startswith(b"%PDF"):
+                text = ocr_service.extract_full_text_from_pdf(file_bytes)
+            else:
+                text = ocr_service.extract_full_text(
+                    Image.open(io.BytesIO(file_bytes))
+                )
+        except Exception as exc:
+            logger.error("belarus_ocr_failed", error=str(exc))
+            return {"country": "BY", "ui": ui, "error": "OCR unavailable"}
+
+        if not text:
+            return {"country": "BY", "ui": ui, "error": "no text recognised"}
+
+        return parse_belarusian_receipt(text, ui_hint=ui)
 
     async def _extract_qr_string(self, file_bytes: bytes) -> str | None:
         """Extract QR code string from image or PDF"""

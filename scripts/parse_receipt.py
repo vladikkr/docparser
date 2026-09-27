@@ -48,26 +48,31 @@ def _is_russian_qr(qr: str) -> bool:
     return "fn=" in qr and "fp=" in qr
 
 
-def _ocr_payload(data: bytes, ocr_service) -> dict:
-    """Recognise the printed text of a receipt."""
+def _ocr_text(data: bytes, ocr_service) -> str:
+    """Recognise the printed text of a receipt, empty string on failure."""
     try:
         if data[:4] == b"%PDF":
-            text = ocr_service.extract_full_text_from_pdf(data)
-        else:
-            import io
+            return ocr_service.extract_full_text_from_pdf(data)
+        import io
 
-            from PIL import Image
+        from PIL import Image
 
-            text = ocr_service.extract_full_text(Image.open(io.BytesIO(data)))
+        return ocr_service.extract_full_text(Image.open(io.BytesIO(data)))
     except Exception as exc:
-        return {
-            "raw_text": "",
-            "error": (
-                f"{type(exc).__name__}: {exc}. "
-                "Install OCR extras: pip install -r requirements-ocr.txt"
-            ),
-        }
-    return {"raw_text": text}
+        print(f"OCR failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return ""
+
+
+def _ocr_payload(data: bytes, ocr_service) -> dict:
+    """Recognise the printed text of a receipt."""
+    text = _ocr_text(data, ocr_service)
+    if text:
+        return {"raw_text": text}
+    return {
+        "raw_text": "",
+        "error": "Install OCR extras: pip install -r requirements-ocr.txt",
+    }
+
 
 
 def _payload_from_qr(qr: str, warning: str) -> dict:
@@ -109,15 +114,23 @@ async def _parse(path: pathlib.Path, raw_text: bool) -> dict:
 
     if qr and not _is_russian_qr(qr):
         # A bare token: Belarusian receipts carry only the unique document id.
-        result["method"] = "foreign_qr"
-        result["document_type"] = "receipt_kkt"
+        from app.services.parsers.receipt_by import parse_belarusian_receipt
+
+        text = _ocr_text(data, ocr_service)
+        result["data"] = parse_belarusian_receipt(text, ui_hint=qr)
         result["qr_raw"] = qr
-        result["warning"] = (
-            "QR holds a bare document id, not a Russian fiscal QR. "
-            "Reading the printed text instead."
-        )
-        result["data"] = _ocr_payload(data, ocr_service)
-        result["complete"] = False
+        result["method"] = "belarus_ocr"
+        result["document_type"] = "receipt_kkt"
+        result["complete"] = result["data"].get("complete", False)
+        if text:
+            result["warning"] = (
+                "Belarusian receipt: resolved from the printed text, "
+                "the id was read from the QR code."
+            )
+        else:
+            result["method"] = "failed"
+            result["data"] = {}
+            result["error"] = "QR id found but no text could be read"
         return result
 
     if qr:
@@ -175,6 +188,30 @@ def _summarise(result: dict) -> str:
             )
         if len(items) > 8:
             lines.append(f"   ... ещё {len(items) - 8}")
+    elif method == "belarus_ocr":
+        data = result.get("data", {})
+        seller = data.get("seller") or {}
+        lines.append(f"Продавец:  {seller.get('name') or '—'}")
+        lines.append(f"УНП:       {data.get('unp') or '—'}")
+        lines.append(f"РН СККО:   {data.get('rn_skko') or '—'}")
+        lines.append(f"Документ:  № {data.get('document_number') or '—'}")
+        lines.append(f"Дата:      {data.get('date') or '—'} {data.get('time') or ''}")
+        total = data.get("total_sum")
+        lines.append(f"Итого:     {total if total is not None else '—'} {data.get('currency') or ''}")
+        lines.append(f"УИ:        {data.get('ui') or '—'}")
+        items = data.get("items") or []
+        lines.append(f"Позиций:   {len(items)}")
+        for row in items[:8]:
+            lines.append(
+                f"   - {row.get('name') or '(без названия)'} | "
+                f"{row.get('quantity', '?')} x {row.get('price', '?')} = {row.get('sum', '?')}"
+            )
+        if items and not data.get("reconciled"):
+            lines.append(
+                f"   ВНИМАНИЕ: сумма позиций {data.get('items_sum')} не совпадает с итогом"
+            )
+        if result.get("warning"):
+            lines.append(f"Внимание:  {result['warning']}")
     elif method == "qr":
         data = result.get("data", {})
         lines.append(f"ФН:        {data.get('fiscal_number') or '—'}")

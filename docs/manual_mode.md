@@ -11,14 +11,36 @@ pip install -r requirements.txt
 pip install -r requirements-ocr.txt   # QR + OCR
 ```
 
-Для OCR на Windows дополнительно установите Tesseract:
-https://github.com/UB-Mannheim/tesseract/wiki — и добавьте в PATH.
+OCR требует отдельной программы — Tesseract. На Windows:
+
+```bat
+winget install --id UB-Mannheim.TesseractOCR
+```
+
+Затем скачайте языковые пакеты в `%LOCALAPPDATA%\docparser\tessdata\`:
+
+- https://github.com/tesseract-ocr/tessdata_best/raw/main/rus.traineddata → `rus.traineddata`
+- скопируйте `eng.traineddata` из `C:\Program Files\Tesseract-OCR\tessdata\`
+
+Код сам находит и Tesseract, и языковые данные; переменные окружения не нужны.
+Проверить: `python -c "import sys; sys.path.insert(0,'.'); from app.services.ocr import available_languages; print(available_languages())"`
 
 ## Как обработать чек
 
 ```bash
 python scripts/parse_receipt.py чек.jpg
 ```
+
+Четыре пути, от лучшего к худшему:
+
+| Метод | Что значит | Что в ответе |
+|-------|-----------|--------------|
+| `fns` | Россия: QR прочитан, ФНС ответил | Полный чек: продавец, позиции, НДС |
+| `belarus_ocr` | Беларусь: УИ из QR + текст чека | УНП, РН СККО, позиции, итог, УИ |
+| `qr` | Россия, ФНС недоступен | Дата, сумма, ФН, ФД, ФП |
+| `ocr` | QR не найден | Распознанный текст |
+
+## Российский чек
 
 Три пути, от лучшего к худшему:
 
@@ -30,6 +52,35 @@ python scripts/parse_receipt.py чек.jpg
 
 `qr` — полезный страховочный режим: если ФНС лежит, вы всё равно отдаёте
 клиенту ключевые реквизиты, а в ответе честно стоит `complete: false`.
+
+## Белорусский чек
+
+Белорусский чек не разбирается через ФНС: QR содержит только УИ (уникальный
+идентификатор документа), а реестр ведёт Минфин РБ. Поэтому разбор идёт по
+печатному тексту, а УИ берётся из QR — OCR его портит (`b` читается как `p`).
+
+```json
+{
+  "method": "belarus_ocr",
+  "data": {
+    "country": "BY",
+    "seller": { "name": "ИП Рощина Татьяна Александровна", "unp": "790730816" },
+    "unp": "790730816",
+    "rn_skko": "719014711",
+    "document_number": "1539",
+    "date": "2026-09-24",
+    "time": "15:12:23",
+    "total_sum": 20.0,
+    "currency": "BYN",
+    "items": [{ "quantity": 1.0, "price": 20.0, "sum": 20.0 }],
+    "ui": "63288429a8fec2242adb4b37",
+    "reconciled": true
+  }
+}
+```
+
+`reconciled` — сверка суммы позиций с итогом чека. Если `false`, значит строка
+распозналась неточно и цифры требуют проверки.
 
 ## Что выводится
 
@@ -51,6 +102,10 @@ python scripts/parse_receipt.py чек.jpg
 Распознавание QR идёт через zbar (`pyzbar`), а не через OpenCV. На реальных
 чеках детектор OpenCV молча возвращает пустоту там, где zbar читает код сразу.
 OpenCV оставлен как запасной вариант — на случай если zbar не установлен.
+
+QR на фото чека занимает малую часть кадра, а бумага мятая, поэтому код
+пробует несколько масштабов изображения, а затем сканирует его окнами. Без
+этого QR не находится вовсе.
 
 Если в ответе `qr_found: false`, а QR на фото точно есть — проверьте, что
 установлен `pyzbar`.

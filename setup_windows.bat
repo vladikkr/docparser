@@ -54,12 +54,25 @@ if errorlevel 1 (
 )
 
 echo.
-echo === Checking Tesseract (optional, for photo OCR) ===
-"%PY%" -c "import pytesseract; pytesseract.get_tesseract_version(); print('    tesseract: OK')" 2>nul
+echo === Checking Tesseract (needed for OCR) ===
+where tesseract >nul 2>nul
 if errorlevel 1 (
-    echo [i] Tesseract not installed. Fine for now - QR is the main path.
-    echo     Install later from:
-    echo     https://github.com/UB-Mannheim/tesseract/wiki
+    if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" (
+        echo     found in Program Files
+    ) else (
+        echo [!] Tesseract not installed. Installing with winget...
+        winget install --id UB-Mannheim.TesseractOCR --silent --accept-package-agreements --accept-source-agreements
+    )
+)
+
+echo.
+echo === Checking language packs ===
+"%PY%" -c "import sys; sys.path.insert(0,'.'); from app.services.ocr import available_languages; print('     languages:', available_languages())" 2>nul
+"%PY%" -c "import sys; sys.path.insert(0,'.'); from app.services.ocr import available_languages; import sys as s; s.exit(0 if 'rus' in available_languages() else 1)" 2>nul
+if errorlevel 1 (
+    echo [!] Russian language pack missing.
+    echo     Download rus.traineddata into %%LOCALAPPDATA%%\docparser\tessdata\ :
+    echo     https://github.com/tesseract-ocr/tessdata_best/raw/main/rus.traineddata
 )
 
 echo.

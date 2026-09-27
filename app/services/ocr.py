@@ -5,6 +5,9 @@ can boot on constrained hosts. Import errors surface only when OCR is used.
 """
 
 import io
+import os
+import shutil
+from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 import structlog
@@ -32,6 +35,36 @@ def _optional_import(module: str, feature: str) -> Any:
 
 class OCRUnavailableError(RuntimeError):
     """Raised when OCR dependencies are not installed."""
+
+
+_WINDOWS_TESSERACT = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+_USER_TESSDATA = Path.home() / "AppData" / "Local" / "docparser" / "tessdata"
+
+
+def _configure_pytesseract(pytesseract: Any) -> None:
+    """Point pytesseract at a Tesseract install and its language data.
+
+    Tesseract is a separate program. On Windows the installer does not add it to
+    PATH, and the Russian language pack is not bundled, so both are located
+    explicitly.
+    """
+    if os.name == "nt" and not shutil.which("tesseract"):
+        if os.path.isfile(_WINDOWS_TESSERACT):
+            pytesseract.pytesseract.tesseract_cmd = _WINDOWS_TESSERACT
+
+    # Prefer user-supplied language data (contains rus) over the bundled set.
+    if _USER_TESSDATA.is_dir() and not os.environ.get("TESSDATA_PREFIX"):
+        os.environ["TESSDATA_PREFIX"] = str(_USER_TESSDATA)
+
+
+def available_languages() -> list[str]:
+    """Language packs Tesseract can currently load."""
+    pytesseract = _optional_import("pytesseract", "OCR")
+    _configure_pytesseract(pytesseract)
+    try:
+        return sorted(pytesseract.get_languages(config=""))
+    except Exception:
+        return []
 
 
 def ocr_available() -> bool:
@@ -111,6 +144,7 @@ class OCRService:
     def extract_text(self, image: Any) -> List[Tuple[str, float, List[List[int]]]]:
         """Return (text, confidence, bbox) tuples for an image."""
         pytesseract = _optional_import("pytesseract", "OCR")
+        _configure_pytesseract(pytesseract)
         processed = self.preprocess_image(image)
         try:
             data = pytesseract.image_to_data(
@@ -140,6 +174,7 @@ class OCRService:
 
     def extract_full_text(self, image: Any) -> str:
         pytesseract = _optional_import("pytesseract", "OCR")
+        _configure_pytesseract(pytesseract)
         try:
             return pytesseract.image_to_string(
                 self.preprocess_image(image), config=self.tesseract_config
