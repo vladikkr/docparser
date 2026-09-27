@@ -3,6 +3,7 @@ services:
     name: docparser-db
     plan: free
     region: frankfurt
+    runtime: postgres
 
   - type: redis
     name: docparser-redis
