@@ -50,7 +50,10 @@ class TestDocuments:
         assert response.status_code == 200
         data = response.json()
         assert "document_id" in data
-        assert data["status"] in ["pending", "processing"]
+        # /parse returns the result inline, so it finishes within the request
+        assert data["status"] in ["completed", "failed"]
+        assert data["document_type"] == "receipt_kkt"
+        assert data["processing_time_ms"] >= 0
 
     @pytest.mark.asyncio
     async def test_list_documents(self, client: AsyncClient, auth_headers: dict):

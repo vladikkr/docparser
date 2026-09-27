@@ -1,3 +1,8 @@
+import json
+import time
+import uuid
+from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -17,7 +22,7 @@ from app.schemas import (
     PaginationParams,
     ParseResponse,
 )
-from app.tasks.parse_tasks import parse_document_task
+from app.services.dispatcher import dispatch_parse
 
 logger = structlog.get_logger()
 
@@ -72,10 +77,15 @@ async def upload_document(
     await db.commit()
     await db.refresh(document)
 
-    # Queue parsing task
-    parse_document_task.delay(str(document.id))
+    # Queue parsing task (Celery if available, otherwise inline)
+    mode = dispatch_parse(document.id)
 
-    logger.info("document_uploaded", document_id=str(document.id), user_id=str(user.id))
+    logger.info(
+        "document_uploaded",
+        document_id=str(document.id),
+        user_id=str(user.id),
+        mode=mode,
+    )
     return document
 
 
@@ -87,36 +97,61 @@ async def parse_document_sync(
     user: User = Depends(get_api_key_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Synchronous parsing for API key users"""
+    """Parse a document and return the result in the same request."""
     validate_file(file)
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise ValidationError(f"File too large. Max size: {settings.MAX_FILE_SIZE_MB}MB")
 
-    # TODO: Call parser directly
-    # For now, create document and return pending
+    doc_type = document_type or DocumentType.RECEIPT_KKT
+    if doc_type == DocumentType.UNKNOWN:
+        doc_type = DocumentType.RECEIPT_KKT
+
+    started = time.perf_counter()
     document = Document(
         user_id=user.id,
         filename=file.filename,
         mime_type=file.content_type,
         file_size=len(content),
-        storage_path=f"users/{user.id}/{file.filename}",
-        document_type=document_type or DocumentType.UNKNOWN,
+        storage_path=f"users/{user.id}/{uuid.uuid4().hex[:8]}-{file.filename}",
+        document_type=doc_type,
         status=DocumentStatus.PROCESSING,
     )
     db.add(document)
     await db.commit()
     await db.refresh(document)
 
-    # Queue task
-    parse_document_task.delay(str(document.id))
+    parsed_data: dict[str, Any] | None = None
+    error: str | None = None
+    try:
+        from app.services.parsers import get_parser, register_parsers
+
+        register_parsers(db)
+        parser = get_parser(doc_type, db)
+        if parser is None:
+            raise ValueError(f"No parser registered for {doc_type}")
+        parsed_data = await parser.parse(document, content)
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        logger.warning("inline_parse_error", document_id=str(document.id), error=error)
+
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+
+    document.parsed_data = json.dumps(parsed_data, ensure_ascii=False) if parsed_data else None
+    document.error_message = error
+    document.processing_time_ms = elapsed_ms
+    document.status = DocumentStatus.FAILED if error else DocumentStatus.COMPLETED
+    document.completed_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(document)
 
     return ParseResponse(
         document_id=document.id,
-        status=DocumentStatus.PROCESSING,
+        status=document.status,
         document_type=document.document_type,
-        parsed_data=None,
-        processing_time_ms=0,
+        parsed_data=parsed_data,
+        raw_text=(parsed_data or {}).get("raw_text") if return_raw_text else None,
+        processing_time_ms=elapsed_ms,
     )
 
 

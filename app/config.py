@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import Field, RedisDsn
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -24,8 +24,9 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
 
-    REDIS_URL: RedisDsn
+    REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_MAX_CONNECTIONS: int = 50
+    CELERY_ENABLED: bool = False
 
     SECRET_KEY: str = Field(..., min_length=32)
     ALGORITHM: str = "HS256"
