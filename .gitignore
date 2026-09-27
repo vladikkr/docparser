@@ -1,0 +1,82 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Duplicate alembic config
+alembic/alembic.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+htmlcov/
+.coverage
+coverage.xml
+.pytest_cache/
+
+# Type checking
+.mypy_cache/
+.pyre/
+.pyright/
+
+# Ruff
+.ruff_cache/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Docker
+docker-compose.override.yml
+
+# Database
+*.sqlite
+*.db
+
+# Uploads
+uploads/
+media/
+
+# Secrets
+*.pem
+*.key
+*.crt
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Poetry
+poetry.lock
+
+# Node modules (if any frontend)
+node_modules/

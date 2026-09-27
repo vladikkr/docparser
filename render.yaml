@@ -1,0 +1,92 @@
+services:
+  # PostgreSQL Database
+  - type: pserv
+    name: docparser-db
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "16"
+    databaseName: docparser
+    user: docparser
+
+  # Redis (Upstash compatible)
+  - type: redis
+    name: docparser-redis
+    plan: free
+    region: frankfurt
+    maxmemoryPolicy: allkeys-lru
+
+  # Web Service (API)
+  - type: web
+    name: docparser-api
+    plan: free
+    region: frankfurt
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docparser-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: docparser-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_STARTER
+        sync: false
+      - key: STRIPE_PRICE_PRO
+        sync: false
+      - key: STRIPE_PRICE_BUSINESS
+        sync: false
+      - key: FNS_API_BASE_URL
+        value: https://proverkacheka.nalog.ru:9999/v1
+      - key: SENTRY_DSN
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true
+
+  # Background Worker
+  - type: worker
+    name: docparser-worker
+    plan: free
+    region: frankfurt
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: docparser-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: docparser-redis
+          property: connectionString
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: docparser-api
+          property: envVars.SECRET_KEY
+      - key: ENVIRONMENT
+        value: production
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: FNS_API_BASE_URL
+        value: https://proverkacheka.nalog.ru:9999/v1
+    command: celery -A app.tasks.celery_app worker --loglevel=info --queues=parsing,maintenance

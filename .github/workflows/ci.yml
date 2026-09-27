@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: docparser
+          POSTGRES_PASSWORD: docparser
+          POSTGRES_DB: docparser_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "poetry"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run Ruff
+        run: poetry run ruff check .
+
+      - name: Run MyPy
+        run: poetry run mypy app
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://docparser:docparser@localhost:5432/docparser_test
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-secret-key-min-32-characters-long
+          ENVIRONMENT: testing
+          STRIPE_SECRET_KEY: sk_test_xxx
+          STRIPE_PUBLISHABLE_KEY: pk_test_xxx
+          STRIPE_WEBHOOK_SECRET: whsec_xxx
+          STRIPE_PRICE_STARTER: price_xxx
+          STRIPE_PRICE_PRO: price_xxx
+          STRIPE_PRICE_BUSINESS: price_xxx
+        run: poetry run pytest --cov=app --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.xml
