@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocParser — API для распознавания чеков и УПД в JSON</title>
+<meta name="description" content="API, который превращает фото чека ККТ, УПД и счёта-фактуры в структурированный JSON для 1С и МойСклад.">
+<style>
+  :root{--ink:#0f1720;--muted:#5b6b7a;--line:#e4e9ef;--bg:#fff;--accent:#1a6b4f;--accent2:#0f5132;--soft:#f6f9f8;--warn:#b45309}
+  *{box-sizing:border-box}
+  body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+  .wrap{max-width:980px;margin:0 auto;padding:0 20px}
+  header{padding:28px 0;border-bottom:1px solid var(--line)}
+  .brand{font-weight:700;font-size:20px;letter-spacing:-.02em}
+  .brand span{color:var(--accent)}
+  nav a{color:var(--muted);text-decoration:none;margin-left:20px;font-size:15px}
+  nav a:hover{color:var(--accent)}
+  .hero{padding:64px 0 40px}
+  h1{font-size:clamp(30px,5vw,46px);line-height:1.12;letter-spacing:-.03em;margin:0 0 18px;font-weight:700}
+  h1 em{font-style:normal;color:var(--accent)}
+  .lead{font-size:19px;color:var(--muted);max-width:640px;margin:0 0 28px}
+  .cta{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+  .btn{display:inline-block;padding:13px 22px;border-radius:8px;font-weight:600;font-size:15px;text-decoration:none;border:1px solid transparent}
+  .btn-p{background:var(--accent);color:#fff}
+  .btn-p:hover{background:var(--accent2)}
+  .btn-s{border-color:var(--line);color:var(--ink)}
+  .btn-s:hover{border-color:var(--accent);color:var(--accent)}
+  .note{font-size:14px;color:var(--muted)}
+  section{padding:44px 0;border-top:1px solid var(--line)}
+  h2{font-size:26px;letter-spacing:-.02em;margin:0 0 8px}
+  .sub{color:var(--muted);margin:0 0 26px}
+  .grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+  .card{border:1px solid var(--line);border-radius:10px;padding:20px;background:var(--soft)}
+  .card h3{margin:0 0 6px;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+  pre{background:#0f1720;color:#e6edf3;padding:18px;border-radius:10px;overflow:auto;font-size:13px;line-height:1.55}
+  pre .k{color:#79c0ff}.pre-c{color:#8b949e}
+  table{width:100%;border-collapse:collapse;font-size:15px}
+  th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line)}
+  th{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;background:var(--soft);border:1px solid var(--line);color:var(--muted)}
+  ul{padding-left:20px}li{margin:5px 0}
+  .warn{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px 18px;color:var(--warn);font-size:15px}
+  footer{padding:36px 0;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
+  .faq{border-top:1px solid var(--line);padding:18px 0}
+  .faq b{display:block;margin-bottom:4px}
+  .faq p{margin:0;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+    <div class="brand">doc<span>parser</span></div>
+    <nav><a href="#how">как</a><a href="#api">api</a><a href="#price">тарифы</a><a href="#start">начать</a></nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section class="hero">
+  <h1>Фото чека → <em>готовый JSON</em> для 1С</h1>
+  <p class="lead">
+    API распознаёт чеки ККТ, УПД и счета-фактуры и отдаёт структурированные данные:
+    позиции, НДС, суммы, ИНН. Бухгалтеру остаётся нажать «создать документ».
+  </p>
+  <div class="cta">
+    <a class="btn btn-p" href="#start">Попробовать — 50 чеков бесплатно</a>
+    <a class="btn btn-s" href="#api">Посмотреть ответ API</a>
+  </div>
+  <p class="note" style="margin-top:14px">Без карты. Без установки. Работает с вашим фото чека.</p>
+</section>
+
+<section id="how">
+  <h2>Как это работает</h2>
+  <p class="sub">Три шага, которые заменяют ручной ввод.</p>
+  <div class="grid">
+    <div class="card">
+      <h3>1. Загружаете фото</h3>
+      <p>Из Telegram, почты или с телефона. PDF, JPG, PNG — до 20 МБ.</p>
+    </div>
+    <div class="card">
+      <h3>2. Получаете JSON</h3>
+      <p>Позиции, количество, цены, ставка НДС, итог, реквизиты продавца.</p>
+    </div>
+    <div class="card">
+      <h3>3. Загружаете в 1С</h3>
+      <p>Обработка заполняет документ. Или вебхук сам присылает результат.</p>
+    </div>
+  </div>
+</section>
+
+<section id="api">
+  <h2>Что приходит в ответе</h2>
+  <p class="sub">Один POST-запрос — и готовые данные документа.</p>
+<pre><span class="pre-c">POST</span> /api/v1/documents/parse
+<span class="pre-c">X-API-Key:</span> dp_ваш_ключ
+<span class="pre-c">Content-Type:</span> multipart/form-data
+
+<span class="pre-c">→ 200 OK</span>
+{
+  <span class="k">"document_type"</span>: <span class="pre-c">"receipt_kkt"</span>,
+  <span class="k">"status"</span>: <span class="pre-c">"completed"</span>,
+  <span class="k">"total_sum"</span>: <span class="pre-c">"1240.00"</span>,
+  <span class="k">"seller"</span>: {
+    <span class="k">"name"</span>: <span class="pre-c">"ИП Иванов И.И."</span>,
+    <span class="k">"inn"</span>: <span class="pre-c">"7701234567"</span>
+  },
+  <span class="k">"items"</span>: [
+    { <span class="k">"name"</span>: <span class="pre-c">"Молоко 3.2%"</span>, <span class="k">"price"</span>: <span class="pre-c">"89.00"</span>,
+      <span class="k">"quantity"</span>: <span class="pre-c">"2"</span>, <span class="k">"vat_rate"</span>: <span class="pre-c">"10"</span> },
+    { <span class="k">"name"</span>: <span class="pre-c">"Хлеб Бородинский"</span>, <span class="k">"price"</span>: <span class="pre-c">"59.00"</span>,
+      <span class="k">"quantity"</span>: <span class="pre-c">"3"</span>, <span class="k">"vat_rate"</span>: <span class="pre-c">"10"</span> }
+  ],
+  <span class="k">"processing_time_ms"</span>: <span class="pre-c">1840</span>
+}</pre>
+</section>
+
+<section>
+  <h2>Какие документы понимаем</h2>
+  <p class="sub">Начинаем с чеков ККТ — это 80% ручного ввода.</p>
+  <div class="grid">
+    <div class="card"><h3>Чек ККТ <span class="tag">работает</span></h3><p>Фото чека, в том числе с QR-кодом — данные сверяются с ФНС.</p></div>
+    <div class="card"><h3>УПД / УКД <span class="tag">скоро</span></h3><p>Универсальный передаточный документ, включая электронный XML.</p></div>
+    <div class="card"><h3>Счёт-фактура <span class="tag">скоро</span></h3><p>Разбор НДС по ставкам, позиции и реквизиты сторон.</p></div>
+    <div class="card"><h3>Акт работ <span class="tag">скоро</span></h3><p>Для подряда и услуг — частый случай у аутсорсеров.</p></div>
+  </div>
+</section>
+
+<section id="price">
+  <h2>Тарифы</h2>
+  <p class="sub">Начните бесплатно. Перейдёте на платный, когда бухгалтер поймёт экономию.</p>
+  <table>
+    <tr><th>Тариф</th><th>Документов в месяц</th><th>Ключей API</th><th class="num">Цена</th></tr>
+    <tr><td><b>Free</b></td><td>50</td><td>1</td><td class="num">0 ₽</td></tr>
+    <tr><td>Starter</td><td>1 000</td><td>3</td><td class="num">2 900 ₽</td></tr>
+    <tr><td>Pro</td><td>10 000</td><td>10</td><td class="num">9 900 ₽</td></tr>
+    <tr><td>Business</td><td>50 000</td><td>неограничено</td><td class="num">29 900 ₽</td></tr>
+  </table>
+  <p class="note" style="margin-top:14px">Списание идёт по факту обработки документа. Неиспользованный остаток не сгорает.</p>
+</section>
+
+<section>
+  <h2>Для кого это</h2>
+  <ul>
+    <li><b>Бухгалтеры на аутсорсе</b> — ввод чеков за пачкой фото вместо ручного заполнения.</li>
+    <li><b>Бухгалтерии малого бизнеса</b> — 20–50 чеков в неделю от сотрудников и кассы.</li>
+    <li><b>Разработчики 1С</b> — REST API вместо ручного парсинга, вебхуки вместо опроса статуса.</li>
+    <li><b>Сервисы бухгалтерского аутсорсинга</b> — встраивают в свою платформу и продают вместе.</li>
+  </ul>
+</section>
+
+<section id="start">
+  <h2>Начать</h2>
+  <div class="warn" style="margin-bottom:20px">
+    Сервис в тестовом режиме: оплата не списывается, данные чека не покидают контур запроса.
+  </div>
+  <p>Получите API-ключ и отправьте первый чек — это займёт две минуты.</p>
+  <div class="cta">
+    <a class="btn btn-p" href="mailto:hello@docparser.ru?subject=Хочу%20попробовать%20DocParser">Запросить API-ключ</a>
+    <a class="btn btn-s" href="#api">Сначала посмотреть пример ответа</a>
+  </div>
+</section>
+
+<section>
+  <h2>Вопросы</h2>
+  <div class="faq"><b>Это не заменит бухгалтера?</b><p>Нет. Мы заполняем поля, решение принимает человек. Ценность — в снятии ручного ввода, а не в замене учёта.</p></div>
+  <div class="faq"><b>Что если чек плохо сфотографирован?</b><p>Позиции считываются с QR-кода через ФНС — качество фото влияет меньше, чем кажется.</p></div>
+  <div class="faq"><b>Можно ли в 1С?</b><p>Да, это основной сценарий. Готовая обработка заполняет документ из ответа API. Инструкция — в документации.</p></div>
+  <div class="faq"><b>Где хранятся данные?</b><p>Файл обрабатывается и результат возвращается в ответе. Документы живут в вашей базе, не в нашей.</p></div>
+</section>
+
+<footer>
+  <div class="wrap" style="padding:0">
+    docparser · API для российских первичных документов ·
+    <a href="mailto:hello@docparser.ru" style="color:var(--muted)">hello@docparser.ru</a>
+  </div>
+</footer>
+
+</div>
+</body>
+</html>
