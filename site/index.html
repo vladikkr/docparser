@@ -156,11 +156,12 @@
   <div class="warn" style="margin-bottom:20px">
     Сервис в тестовом режиме: оплата не списывается, данные чека не покидают контур запроса.
   </div>
-  <p>Получите API-ключ и отправьте первый чек — это займёт две минуты.</p>
+  <p>Пришлите фото чека в Telegram — разберу и верну JSON, чтобы вы оценили результат на своих документах.</p>
   <div class="cta">
-    <a class="btn btn-p" href="mailto:hello@docparser.ru?subject=Хочу%20попробовать%20DocParser">Запросить API-ключ</a>
+    <a class="btn btn-p" id="cta-tg" href="#" rel="noopener">Написать в Telegram</a>
     <a class="btn btn-s" href="#api">Сначала посмотреть пример ответа</a>
   </div>
+  <p class="note" style="margin-top:14px">Бесплатно: 10 чеков на тест. Без карты и без регистрации.</p>
 </section>
 
 <section>
@@ -174,10 +175,27 @@
 <footer>
   <div class="wrap" style="padding:0">
     docparser · API для российских первичных документов ·
-    <a href="mailto:hello@docparser.ru" style="color:var(--muted)">hello@docparser.ru</a>
+    <span id="contact-tg">Telegram: уточняется</span>
   </div>
 </footer>
 
 </div>
+
+<script>
+  // Contact channel. Set the username here, in one place.
+  var TELEGRAM = "";           // e.g. "vladikkr" without the @
+  var MSG = "Хочу попробовать разбор чеков";
+
+  if (TELEGRAM) {
+    var url = "https://t.me/" + TELEGRAM + "?text=" + encodeURIComponent(MSG);
+    document.getElementById("cta-tg").href = url;
+    document.getElementById("contact-tg").innerHTML =
+      'Telegram: <a href="' + url + '" rel="noopener">@' + TELEGRAM + "</a>";
+  } else {
+    document.getElementById("cta-tg").href = "#start";
+    document.getElementById("contact-tg").textContent = "Telegram: уточняется";
+  }
+</script>
+
 </body>
 </html>
