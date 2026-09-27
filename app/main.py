@@ -9,14 +9,21 @@ from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from app.api.v1 import api_v1_router
 from app.config import settings
 from app.core import close_redis, configure_logging, register_exception_handlers
+from app.core.logging import get_logger
 from app.database import engine, init_db
+
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     configure_logging()
-    await init_db()
+    try:
+        await init_db()
+    except Exception as exc:
+        logger.error("db_init_failed", error=str(exc))
+        logger.warning("Starting anyway - migrations should have created tables")
     yield
     # Shutdown
     await close_redis()
