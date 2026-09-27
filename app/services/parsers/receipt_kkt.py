@@ -38,43 +38,11 @@ class ReceiptKKTParser(BaseParser):
     async def _extract_qr_string(self, file_bytes: bytes) -> str | None:
         """Extract QR code string from image or PDF"""
         try:
-            # Try PDF first
-            if file_bytes.startswith(b"%PDF"):
-                images = ocr_service.pdf_to_images(file_bytes)
-                if images:
-                    return self._find_qr_in_image(images[0])
-            else:
-                # Image
-                image = Image.open(io.BytesIO(file_bytes))
-                return self._find_qr_in_image(image)
+            from app.services.qr import decode_receipt_qr_bytes
+
+            return decode_receipt_qr_bytes(file_bytes)
         except Exception as e:
             logger.debug("qr_extraction_failed", error=str(e))
-        return None
-
-    def _find_qr_in_image(self, image: Image.Image) -> str | None:
-        """Find a receipt QR code in an image.
-
-        zbar is tried first: OpenCV's detector silently returns nothing for
-        some perfectly valid receipt QRs.
-        """
-        try:
-            from pyzbar.pyzbar import decode as zb_decode
-
-            for found in zb_decode(image):
-                text = found.data.decode("utf-8", errors="ignore")
-                if "fn=" in text and "fp=" in text:
-                    return text
-        except Exception:
-            pass
-
-        try:
-            import cv2
-            cv_image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-            data, _bbox, _ = cv2.QRCodeDetector().detectAndDecode(cv_image)
-            if data and ("t=" in data or "fn=" in data):
-                return data
-        except Exception:
-            pass
         return None
 
     async def _parse_via_ocr(self, file_bytes: bytes) -> dict[str, Any]:

@@ -19,69 +19,55 @@ from datetime import datetime, timezone
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 
-def _decode_qr(image) -> str | None:
-    """Try pyzbar first, then OpenCV.
-
-    OpenCV's detector silently fails on some receipt QRs that zbar reads
-    without trouble, so it is only a backup.
-    """
-    try:
-        from pyzbar.pyzbar import decode as zb_decode
-
-        for found in zb_decode(image):
-            text = found.data.decode("utf-8", errors="ignore")
-            if "fn=" in text and "fp=" in text:
-                return text
-    except Exception:
-        pass
-
-    try:
-        import cv2
-        import numpy as np
-
-        arr = cv2.cvtColor(np.array(image.convert("RGB")), cv2.COLOR_RGB2BGR)
-        text, _, _ = cv2.QRCodeDetector().detectAndDecode(arr)
-        if text and "fn=" in text and "fp=" in text:
-            return text
-    except Exception:
-        pass
-
-    return None
-
-
 def _find_qr_string(data: bytes) -> str | None:
     """Locate the receipt QR payload in an image or PDF."""
-    try:
-        from PIL import Image
-        import io
+    from app.services.qr import decode_receipt_qr_bytes
 
-        if data[:4] == b"%PDF":
-            from app.services.ocr import ocr_service
+    text = decode_receipt_qr_bytes(data)
+    if text:
+        return text
 
-            images = ocr_service.pdf_to_images(data)
-        else:
-            images = [Image.open(io.BytesIO(data))]
-
-        for image in images:
-            text = _decode_qr(image)
-            if text:
-                return text
-    except Exception:
-        pass
-
-    # Fallback: search the raw payload for a QR string
+    # Last resort: the raw bytes may still contain the payload.
     marker = b"t=20"
     start = data.find(marker)
     if start != -1:
         chunk = data[start : start + 200].split(b"\x00")[0]
-        try:
-            candidate = chunk.decode("ascii", errors="ignore")
-        except Exception:
-            candidate = ""
+        candidate = chunk.decode("ascii", errors="ignore")
         if "fn=" in candidate and "fp=" in candidate:
             return candidate
 
     return None
+
+
+def _is_russian_qr(qr: str) -> bool:
+    """A Russian fiscal QR carries the fiscal number and signature.
+
+    Belarusian receipts put a bare unique document id in the QR instead, and
+    that token must not be pushed to the FNS API.
+    """
+    return "fn=" in qr and "fp=" in qr
+
+
+def _ocr_payload(data: bytes, ocr_service) -> dict:
+    """Recognise the printed text of a receipt."""
+    try:
+        if data[:4] == b"%PDF":
+            text = ocr_service.extract_full_text_from_pdf(data)
+        else:
+            import io
+
+            from PIL import Image
+
+            text = ocr_service.extract_full_text(Image.open(io.BytesIO(data)))
+    except Exception as exc:
+        return {
+            "raw_text": "",
+            "error": (
+                f"{type(exc).__name__}: {exc}. "
+                "Install OCR extras: pip install -r requirements-ocr.txt"
+            ),
+        }
+    return {"raw_text": text}
 
 
 def _payload_from_qr(qr: str, warning: str) -> dict:
@@ -121,6 +107,19 @@ async def _parse(path: pathlib.Path, raw_text: bool) -> dict:
     qr = _find_qr_string(data)
     result["qr_found"] = bool(qr)
 
+    if qr and not _is_russian_qr(qr):
+        # A bare token: Belarusian receipts carry only the unique document id.
+        result["method"] = "foreign_qr"
+        result["document_type"] = "receipt_kkt"
+        result["qr_raw"] = qr
+        result["warning"] = (
+            "QR holds a bare document id, not a Russian fiscal QR. "
+            "Reading the printed text instead."
+        )
+        result["data"] = _ocr_payload(data, ocr_service)
+        result["complete"] = False
+        return result
+
     if qr:
         try:
             receipt = await validate_receipt_by_qr(qr)
@@ -147,23 +146,9 @@ async def _parse(path: pathlib.Path, raw_text: bool) -> dict:
         return result
 
     # OCR fallback
-    try:
-        if data[:4] == b"%PDF":
-            text = ocr_service.extract_full_text_from_pdf(data)
-        else:
-            from PIL import Image
-            import io
-
-            text = ocr_service.extract_full_text(Image.open(io.BytesIO(data)))
-        result["method"] = "ocr"
-        result["document_type"] = "receipt_kkt"
-        result["data"] = {"raw_text": text}
-    except Exception as exc:
-        result["method"] = "failed"
-        result["error"] = (
-            f"{type(exc).__name__}: {exc}. "
-            "Install OCR extras: pip install -r requirements-ocr.txt"
-        )
+    result["method"] = "ocr"
+    result["document_type"] = "receipt_kkt"
+    result["data"] = _ocr_payload(data, ocr_service)
 
     return result
 
