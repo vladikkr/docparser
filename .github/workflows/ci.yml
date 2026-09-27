@@ -48,6 +48,9 @@ jobs:
       - name: Run Ruff
         run: poetry run ruff check .
 
+      - name: Verify all imports are declared in requirements.txt
+        run: python scripts/check_requirements.py
+
       - name: Run MyPy
         run: poetry run mypy app
 

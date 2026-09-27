@@ -1,5 +1,4 @@
-# Core API dependencies - keeps the build small and fast.
-# OCR extras live in requirements-ocr.txt (large: opencv, numpy, pillow).
+# Core API dependencies - kept small so the Docker build stays fast.
 
 fastapi>=0.109
 uvicorn[standard]>=0.27
@@ -7,6 +6,7 @@ sqlalchemy>=2.0
 asyncpg>=0.29
 alembic>=1.13
 python-jose[cryptography]>=3.3
+passlib[bcrypt]>=1.7
 python-multipart>=0.0.6
 pydantic>=2.5
 pydantic-settings>=2.1
@@ -17,3 +17,6 @@ redis>=5.0
 structlog>=24.0
 python-dotenv>=1.0
 python-dateutil>=2.8
+stripe>=7.0
+celery>=5.3
+sentry-sdk>=1.38

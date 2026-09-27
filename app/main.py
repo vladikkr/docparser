@@ -1,10 +1,7 @@
 from contextlib import asynccontextmanager
 
-import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 
 from app.api.v1 import api_v1_router
 from app.config import settings
@@ -41,17 +38,25 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Sentry
+    # Sentry (optional - never block startup on monitoring)
     if settings.SENTRY_DSN:
-        sentry_sdk.init(
-            dsn=settings.SENTRY_DSN,
-            integrations=[
-                FastApiIntegration(auto_enable=True),
-                SqlalchemyIntegration(),
-            ],
-            traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
-            environment=settings.ENVIRONMENT,
-        )
+        try:
+            import sentry_sdk
+            from sentry_sdk.integrations.fastapi import FastApiIntegration
+            from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+            sentry_sdk.init(
+                dsn=settings.SENTRY_DSN,
+                integrations=[
+                    FastApiIntegration(auto_enable=True),
+                    SqlalchemyIntegration(),
+                ],
+                traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+                environment=settings.ENVIRONMENT,
+            )
+            logger.info("sentry_initialized")
+        except Exception as exc:
+            logger.warning("sentry_init_failed", error=str(exc))
 
     # CORS
     app.add_middleware(
