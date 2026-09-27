@@ -3,12 +3,14 @@ services:
     name: docparser-db
     plan: free
     region: frankfurt
+    runtime: postgresql
 
   - type: redis
     name: docparser-redis
     plan: free
     region: frankfurt
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
 
   - type: web
     name: docparser-api
@@ -70,10 +72,7 @@ services:
           name: docparser-redis
           property: connectionString
       - key: SECRET_KEY
-        fromService:
-          type: web
-          name: docparser-api
-          property: envVars.SECRET_KEY
+        generateValue: true
       - key: ENVIRONMENT
         value: production
       - key: STRIPE_SECRET_KEY
