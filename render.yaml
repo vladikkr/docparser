@@ -1,21 +1,15 @@
 services:
-  # PostgreSQL Database
   - type: pserv
     name: docparser-db
     plan: free
     region: frankfurt
-    postgresMajorVersion: "16"
-    databaseName: docparser
-    user: docparser
 
-  # Redis (Upstash compatible)
   - type: redis
     name: docparser-redis
     plan: free
     region: frankfurt
     maxmemoryPolicy: allkeys-lru
 
-  # Web Service (API)
   - type: web
     name: docparser-api
     plan: free
@@ -58,7 +52,6 @@ services:
     healthCheckPath: /health
     autoDeploy: true
 
-  # Background Worker
   - type: worker
     name: docparser-worker
     plan: free
