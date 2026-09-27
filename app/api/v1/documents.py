@@ -22,6 +22,7 @@ from app.schemas import (
     PaginationParams,
     ParseResponse,
 )
+from app.services import storage
 from app.services.dispatcher import dispatch_parse
 
 logger = structlog.get_logger()
@@ -59,9 +60,8 @@ async def upload_document(
     if document_type is None:
         document_type = DocumentType.UNKNOWN
 
-    # TODO: Upload to Supabase Storage / S3
-    # For now, store path as local placeholder
-    storage_path = f"users/{user.id}/{file.filename}"
+    # The bytes have to be on disk before the parse task can read them back.
+    storage_path = storage.save(content, str(user.id), file.filename or "upload")
 
     document = Document(
         user_id=user.id,
@@ -113,7 +113,7 @@ async def parse_document_sync(
         filename=file.filename,
         mime_type=file.content_type,
         file_size=len(content),
-        storage_path=f"users/{user.id}/{uuid.uuid4().hex[:8]}-{file.filename}",
+        storage_path=storage.save(content, str(user.id), file.filename or "upload"),
         document_type=doc_type,
         status=DocumentStatus.PROCESSING,
     )
@@ -183,11 +183,48 @@ async def list_documents(
     documents = result.scalars().all()
 
     return DocumentList(
-        documents=documents,
+        documents=[_to_response(d) for d in documents],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
         total_pages=(total + pagination.page_size - 1) // pagination.page_size,
+    )
+
+
+def _to_response(document: Document) -> DocumentResponse:
+    """Build the response body.
+
+    `parsed_data` is a JSON string in the database, while the schema expects a
+    mapping. Returning the model straight from the ORM made every retrieval of a
+    parsed document fail response validation with a 500.
+    """
+    parsed: dict[str, Any] | None = None
+    raw = document.parsed_data
+    if raw:
+        if isinstance(raw, dict):
+            parsed = raw
+        else:
+            try:
+                decoded = json.loads(raw)
+            except (TypeError, ValueError):
+                logger.warning("parsed_data_unreadable", document_id=str(document.id))
+                decoded = None
+            parsed = decoded if isinstance(decoded, dict) else None
+
+    return DocumentResponse(
+        id=document.id,
+        filename=document.filename,
+        mime_type=document.mime_type,
+        file_size=document.file_size,
+        document_type=document.document_type,
+        status=document.status,
+        parsed_data=parsed,
+        error_message=document.error_message,
+        processing_time_ms=document.processing_time_ms,
+        webhook_status=document.webhook_status,
+        created_at=document.created_at,
+        updated_at=document.updated_at,
+        completed_at=document.completed_at,
     )
 
 
@@ -205,7 +242,7 @@ async def get_document(
     if not document:
         raise NotFoundError("Document", str(document_id))
 
-    return document
+    return _to_response(document)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

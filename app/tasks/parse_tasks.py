@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.models import Document, DocumentStatus
+from app.services import storage
 from app.services.parsers import get_parser, register_parsers
 
 logger = structlog.get_logger()
@@ -36,8 +37,15 @@ def get_task_db() -> AsyncSession:
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def parse_document_task(self, document_id: str):
-    """Parse document asynchronously"""
-    return asyncio.run(_parse_document_async(document_id))
+    """Parse document asynchronously."""
+    try:
+        return asyncio.run(_parse_document_async(document_id))
+    except Exception as exc:
+        # Retrying lives here because only the bound task has `self`.
+        logger.warning("parse_task_retry", document_id=document_id, error=str(exc))
+        if self.request.retries >= self.max_retries:
+            raise
+        raise self.retry(exc=exc, countdown=2**self.request.retries * 60)
 
 
 async def _parse_document_async(document_id: str):
@@ -70,9 +78,16 @@ async def _parse_document_async(document_id: str):
                 await session.commit()
                 return {"error": "No parser available"}
 
-            # Load file from storage
-            # TODO: Implement actual file loading from Supabase Storage
-            file_bytes = b""  # Placeholder
+            # Load the file that /upload put on disk. Without this the parser
+            # received an empty buffer and could never succeed.
+            try:
+                file_bytes = storage.read(document.storage_path)
+            except storage.StorageError as exc:
+                document.status = DocumentStatus.FAILED
+                document.error_message = str(exc)
+                await session.commit()
+                logger.error("document_file_unavailable", document_id=document_id, error=str(exc))
+                return {"error": str(exc)}
 
             # Parse
             import time
@@ -99,7 +114,7 @@ async def _parse_document_async(document_id: str):
     except Exception as e:
         logger.exception("document_parse_failed", document_id=document_id, error=str(e))
 
-        # Retry logic
+        # Mark the document failed so the client can see why.
         async with db as session:
             result = await session.execute(select(Document).where(Document.id == doc_uuid))
             document = result.scalar_one_or_none()
@@ -108,8 +123,9 @@ async def _parse_document_async(document_id: str):
                 document.error_message = str(e)
                 await session.commit()
 
-        # Retry with exponential backoff
-        raise self.retry(exc=e, countdown=2 ** self.request.retries * 60)
+        # Re-raised as a plain exception: the retry policy lives in the Celery
+        # task, which has a `self`. A bare function has no `self` to retry with.
+        raise
 
 
 @shared_task

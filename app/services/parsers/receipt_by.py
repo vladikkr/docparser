@@ -54,19 +54,46 @@ _SUM_RE = _MONEY_RE
 # the decimal mark are tolerated because OCR inserts them freely (`45, 00`).
 _NUMBER_RE = re.compile(r"\d+(?:[  ]\d{3})*[  ]?[.,][  ]?\d+|\d+(?:[  ]\d{3})*")
 
-# Lines that look like amounts but are not sale lines.
-_NON_ITEM_LABELS = (
+# Headers that introduce the list of sale lines. Printers differ in wording and
+# the number sometimes precedes the word.
+_ITEM_HEADERS = (
+    "Позиция",
+    "Позици",
+    "Позиций",
+    "Товар",
+    "Наименование",
+    "Номенклатура",
+    "Описание",
+)
+
+# Lines that end the item block, whatever the header was called.
+_ITEM_STOP = (
+    "ИТОГО",
+    "ВСЕГО",
+    "Сумма наличными",
+    "Наличными",
+    "Кассир",
+    "Дата",
+    "Оплата",
+    "Картой",
     "Скидка",
     "Начислено",
     "Бонус",
     "Сдача",
-    "Оплата",
-    "Наличными",
-    "К оплате",
-    "Итого",
-    "Всего",
-    "Позиция",
 )
+
+# Marker lines between the seller block and the items, used by the fallback scan.
+_HEADER_BLOCK_END = (
+    "УНП",
+    "РН СККО",
+    "Платежный",
+    "Платёжный",
+    "Касс",
+    "Дата",
+    "Время",
+    "уи",
+)
+
 
 
 
@@ -292,7 +319,12 @@ def _find_ui(lines: list[str], hint: str | None = None) -> str | None:
 
 
 def _find_document_number(lines: list[str]) -> str | None:
-    return _digits(_label_value(lines, ("№ док.", "N док.", "№док.")) or "") or None
+    value = _label_value(
+        lines,
+        ("№ док.", "N док.", "№док.", "№ док", "№док", "Документ", "Док.", "Докум."),
+    )
+    return (_digits(value) if value else "") or None
+
 
 
 def _quantity_candidates(token: str) -> list[float]:
@@ -405,20 +437,29 @@ def _find_discount(lines: list[str]) -> float:
 
 
 def _find_items(lines: list[str], total: float | None) -> list[dict[str, Any]]:
-    """Rows between the `Позиция` header and the total line."""
-    items: list[dict[str, Any]] = []
+    """Rows between the item header and the total line.
+
+    When no header is printed at all the block is located by position instead:
+    everything after the last header line (УНП, date, cashier) and before the
+    total.
+    """
     start = None
     for i, line in enumerate(lines):
-        if _has_label(line, ("Позиция", "Позици")):
+        if _has_label(line, _ITEM_HEADERS):
             start = i
             break
-    if start is None:
-        return items
 
-    for line in lines[start + 1 :]:
-        if _has_label(line, ("ИТОГО", "ВСЕГО", "Сумма наличными", "Кассир", "Дата")):
+    if start is None:
+        start = 0
+        for i, line in enumerate(lines):
+            if _has_label(line, _HEADER_BLOCK_END):
+                start = i + 1
+
+    items: list[dict[str, Any]] = []
+    for line in lines[start:]:
+        if _has_label(line, _ITEM_STOP):
             break
-        if _has_label(line, ("Позиция", "Позици")) or _has_label(line, _NON_ITEM_LABELS):
+        if _has_label(line, _ITEM_HEADERS):
             continue
 
         split = _split_row(line)

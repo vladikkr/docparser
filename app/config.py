@@ -83,6 +83,9 @@ class Settings(BaseSettings):
 
     STORAGE_BUCKET: str = "documents"
     STORAGE_PUBLIC_URL: str | None = None
+    # Where uploaded documents are written. Local disk suits a single instance;
+    # a mounted volume keeps the files across restarts.
+    UPLOAD_DIR: str = "./storage"
 
     @property
     def stripe_configured(self) -> bool:
