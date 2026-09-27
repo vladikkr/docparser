@@ -1,0 +1,12 @@
+# OCR / image processing extras.
+# Install with: pip install -r requirements-ocr.txt
+# Requires system packages: tesseract-ocr, tesseract-ocr-rus, poppler-utils, libmagic1
+
+pillow>=10.0
+pytesseract>=0.3.10
+opencv-python-headless>=4.8
+pdf2image>=1.16
+python-magic>=0.4.27
+
+# Optional billing (only needed for live subscriptions)
+stripe>=7.0

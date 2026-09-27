@@ -9,14 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-rus \
     tesseract-ocr-eng \
     libmagic1 \
-    libgl1 \
-    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# Core deps first so the layer caches independently of the app code
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# OCR extras
+COPY requirements-ocr.txt .
+RUN pip install --no-cache-dir -r requirements-ocr.txt
 
 COPY . .
 

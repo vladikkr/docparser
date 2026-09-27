@@ -3,11 +3,10 @@ import re
 from typing import Any
 
 import structlog
-from PIL import Image
 
 from app.models import Document, DocumentType
 from app.services.fn_api import FNSApiError, validate_receipt_by_qr
-from app.services.ocr import ocr_service
+from app.services.ocr import Image, ocr_service
 from app.services.parsers.base import BaseParser
 
 logger = structlog.get_logger()
@@ -136,5 +135,3 @@ class ReceiptKKTParser(BaseParser):
 
         return items
 
-
-import numpy as np
