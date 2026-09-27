@@ -61,6 +61,11 @@ def create_app() -> FastAPI:
     # Routers
     app.include_router(api_v1_router, prefix=settings.API_PREFIX)
 
+    # Health check at root (for Render/uptime monitors)
+    @app.get("/health", tags=["health"])
+    async def root_health():
+        return {"status": "ok", "version": settings.APP_VERSION}
+
     # Root
     @app.get("/")
     async def root():

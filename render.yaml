@@ -33,5 +33,5 @@ services:
         value: https://proverkacheka.nalog.ru:9999/v1
       - key: SENTRY_DSN
         sync: false
-    healthCheckPath: /health
+    healthCheckPath: /api/v1/health
     autoDeploy: true
