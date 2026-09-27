@@ -35,26 +35,3 @@ services:
         sync: false
     healthCheckPath: /health
     autoDeploy: true
-
-  - type: worker
-    name: docparser-worker
-    plan: free
-    region: frankfurt
-    runtime: docker
-    dockerfilePath: ./docker/Dockerfile
-    dockerContext: .
-    envVars:
-      - key: DATABASE_URL
-        sync: false
-      - key: REDIS_URL
-        sync: false
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ENVIRONMENT
-        value: production
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-      - key: FNS_API_BASE_URL
-        value: https://proverkacheka.nalog.ru:9999/v1
