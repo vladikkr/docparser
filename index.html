@@ -94,12 +94,12 @@
 
 <section id="api">
   <h2>Что приходит в ответе</h2>
-  <p class="sub">Реальный чек: 20,00 BYN, идентификатор взят из QR-кода.</p>
-<pre><span class="pre-c">POST</span> /api/v1/documents/parse
+  <p class="sub">Два примера: белорусский чек (через QR/OCR) и российский чек (через ФНС API).</p>
+  <pre><span class="pre-c">POST</span> /api/v1/documents/parse
 <span class="pre-c">X-API-Key:</span> dp_ваш_ключ
 <span class="pre-c">Content-Type:</span> multipart/form-data
 
-<span class="pre-c">→ 200 OK</span>
+<span class="pre-c">→ 200 OK (Беларусь)</span>
 {
   <span class="k">"country"</span>: <span class="pre-c">"BY"</span>,
   <span class="k">"seller"</span>: { <span class="k">"name"</span>: <span class="pre-c">"ИП Рощина Татьяна"</span>, <span class="k">"unp"</span>: <span class="pre-c">"790730816"</span> },
@@ -113,19 +113,35 @@
   ],
   <span class="k">"ui"</span>: <span class="pre-c">"63288429a8fec2242adb4b37"</span>,
   <span class="k">"trustworthy"</span>: <span class="pre-c">true</span>
+}
+
+<span class="pre-c">→ 200 OK (Россия)</span>
+{
+  <span class="k">"country"</span>: <span class="pre-c">"RU"</span>,
+  <span class="k">"seller"</span>: { <span class="k">"name"</span>: <span class="pre-c">"ИП Иванов И.И."</span>, <span class="k">"inn"</span>: <span class="pre-c">"7701234567"</span> },
+  <span class="k">"fn"</span>: <span class="pre-c">"9280440300007971"</span>,
+  <span class="k">"fd"</span>: <span class="pre-c">"123456"</span>,
+  <span class="k">"fp"</span>: <span class="pre-c">"9876543210"</span>,
+  <span class="k">"date"</span>: <span class="pre-c">"2024-01-15"</span>, <span class="k">"time"</span>: <span class="pre-c">"10:30:00"</span>,
+  <span class="k">"total_sum"</span>: <span class="pre-c">1240.00</span>, <span class="k">"currency"</span>: <span class="pre-c">"RUB"</span>,
+  <span class="k">"items"</span>: [
+    { <span class="k">"name"</span>: <span class="pre-c">"Молоко 3.2%"</span>, <span class="k">"quantity"</span>: <span class="pre-c">2</span>,
+      <span class="k">"price"</span>: <span class="pre-c">"89.00"</span>, <span class="k">"sum"</span>: <span class="pre-c">"178.00"</span>, <span class="k">"vat_rate"</span>: <span class="pre-c">"10"</span> }
+  ],
+  <span class="k">"trustworthy"</span>: <span class="pre-c">true</span>
 }</pre>
 </section>
 
 <section>
   <h2>Какие документы понимаем</h2>
-  <p class="sub">Сейчас работают чеки ККТ — это основной ручной ввод.</p>
+  <p class="sub">Честно о текущем статусе: работаем честно — если не работает, не пишем «скоро».</p>
   <div class="grid">
-    <div class="card"><h3>Чек ККТ РБ <span class="tag">работает</span></h3><p>Фото чека: читаем QR, УНП, РН СККО, позиции, итог.</p></div>
-    <div class="card"><h3>Товарный чек <span class="tag">скоро</span></h3><p>Товарно-заготовительные документы.</p></div>
-    <div class="card"><h3>Счёт-фактура <span class="tag">скоро</span></h3><p>Разбор НДС по ставкам, позиции и реквизиты сторон.</p></div>
-
-    <div class="card"><h3>Акт работ <span class="tag">скоро</span></h3><p>Для подряда и услуг — частый случай у аутсорсеров.</p></div>
-  </div>
+    <div class="card"><h3>Чек ККТ РБ <span class="tag" style="background:#1a6b4f;color:#fff;border:none">работает</span></h3><p>Фото чека: читаем QR, УНП, РН СККО, позиции, итог.</p></div>
+    <div class="card"><h3>Чек ККТ РФ <span class="tag" style="background:#1a6b4f;color:#fff;border:none">работает</span></h3><p>Фото чека РФ: читаем QR, сверяем с ФНС, возвращаем полный JSON.</p></div>
+    <div class="card"><h3>УПД / УКД <span class="tag" style="background:#b45309;color:#fff;border:none">в разработке</span></h3><p>XML-парсер УПД/УКД написан, тестируется на реальных файлах. Если у вас есть образцы — пришлите, протестируем вместе.</p></div>
+    <div class="card"><h3>Счёт-фактура <span class="tag" style="background:#b45309;color:#fff;border:none">в разработке</span></h3><p>XML-парсер счёта-фактуры написан, ждём реальных файлов для тестов.</p></div>
+    <div class="card"><h3>Акт работ <span class="tag" style="background:#b45309;color:#fff;border:none">в разработке</span></h3><p>Для подряда и услуг — пока в очереди.</p></div>
+    <div class="card"><h3>Товарный чек <span class="tag" style="background:#b45309;color:#fff;border:none">в разработке</span></h3><p>Товарно-заготовительные документы — в планах.</p></div>
 </section>
 
 <section id="price">
@@ -145,10 +161,11 @@
   <h2>Для кого это</h2>
   <ul>
     <li><b>Бухгалтеры на аутсорсе</b> — ввод чеков за пачкой фото вместо ручного заполнения.</li>
-    <li><b>Бухгалтерии малого бизнеса</b> — 20–50 чеков в неделю от сотрудников и кассы.</li>
-    <li><b>Разработчики 1С</b> — REST API вместо ручного парсинга, вебхуки вместо опроса статуса.</li>
-    <li><b>Сервисы бухгалтерского аутсорсинга</b> — встраивают в свою платформу и продают вместе.</li>
+    <li><b>Бухгалтерии малого бизнеса</b> — 20–50 чеков в неделю от сотрудников и кассы.</    <li><b>Разработчики 1С</b> — REST API вместо ручного парсинга, вебхуки вместо опроса статуса.
+<li>
+    <li><b>Сервисы бухгалтерского аутсорсинга</b> — встраивают в свою платформу и продают вместе.
   </ul>
+  <p class="note" style="margin-top:10px">Сейчас работает: чеки ККТ РФ и РБ. УПД/Счёт-фактура — в тестах. Если у вас есть образцы УПД/Счёт-фактуры — пришлите, протестируем вместе.</p>
 </section>
 
 <section id="start">
@@ -170,11 +187,13 @@
   <div class="faq"><b>Что если чек плохо сфотографирован?</b><p>Идентификатор документа берётся из QR-кода — он читается даже на мятой бумаге и при плохом свете. Если сумма не подтверждается второй строкой чека, мы честно помечаем результат как непроверенный, а не выдумываем цифры.</p></div>
   <div class="faq"><b>Можно ли в 1С?</b><p>Да, это основной сценарий. Готовая обработка заполняет документ из ответа API. Инструкция — в документации.</p></div>
   <div class="faq"><b>Где хранятся данные?</b><p>Файл обрабатывается и результат возвращается в ответе. Загруженные файлы живут на сервере, пока вы их не удалите.</p></div>
+  <div class="faq"><b>А УПД и Счёт-фактура?</b><p>Парсеры написаны и ждут тестов на реальных файлах. Если у вас есть образцы — пришлите, протестируем вместе.</p></div>
+  <div class="faq"><b>А российский чек ККТ?</b><p>Работает: читаем QR, сверяем с ФНС, возвращаем полный JSON. ФНС должен быть доступен — в Беларуси иногда не отвечает.</p></div>
 </section>
 
 <footer>
   <div class="wrap" style="padding:0">
-    docparser · разбор чеков ККТ Беларуси ·
+    docparser · разбор чеков ККТ Беларуси и России ·
     <span id="contact-tg">Telegram: уточняется</span>
   </div>
 </footer>
