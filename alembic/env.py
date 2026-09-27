@@ -24,8 +24,10 @@ if config.config_file_name is not None:
 # Set target metadata for autogenerate
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url from settings
-config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
+# Override sqlalchemy.url from settings (normalised to the asyncpg driver)
+from app.database import normalize_database_url
+
+config.set_main_option("sqlalchemy.url", normalize_database_url(settings.DATABASE_URL).replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
