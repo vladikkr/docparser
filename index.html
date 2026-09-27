@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DocParser — API для распознавания чеков и УПД в JSON</title>
-<meta name="description" content="API, который превращает фото чека ККТ, УПД и счёта-фактуры в структурированный JSON для 1С и МойСклад.">
+<title>DocParser — разбор чеков ККТ Беларуси в JSON</title>
+<meta name="description" content="Превращает фото чека ККТ (УНП, РН СККО) в структурированный JSON: позиции, суммы, продавец, дата. Для бухгалтерии и 1С.">
 <style>
   :root{--ink:#0f1720;--muted:#5b6b7a;--line:#e4e9ef;--bg:#fff;--accent:#1a6b4f;--accent2:#0f5132;--soft:#f6f9f8;--warn:#b45309}
   *{box-sizing:border-box}
@@ -60,16 +60,17 @@
 <div class="wrap">
 
 <section class="hero">
-  <h1>Фото чека → <em>готовый JSON</em> для 1С</h1>
+  <h1>Фото чека ККТ → <em>готовый JSON</em></h1>
   <p class="lead">
-    API распознаёт чеки ККТ, УПД и счета-фактуры и отдаёт структурированные данные:
-    позиции, НДС, суммы, ИНН. Бухгалтеру остаётся нажать «создать документ».
+    Разбирает чеки белорусских магазинов и отдаёт структурированные данные:
+    позиции, суммы, продавец, УНП, РН СККО, дата и время. Бухгалтеру остаётся
+    нажать «создать документ».
   </p>
   <div class="cta">
-    <a class="btn btn-p" href="#start">Попробовать — 50 чеков бесплатно</a>
-    <a class="btn btn-s" href="#api">Посмотреть ответ API</a>
+    <a class="btn btn-p" href="#start">Попробовать — 10 чеков бесплатно</a>
+    <a class="btn btn-s" href="#api">Посмотреть ответ</a>
   </div>
-  <p class="note" style="margin-top:14px">Без карты. Без установки. Работает с вашим фото чека.</p>
+  <p class="note" style="margin-top:14px">Без карты. Без регистрации. Сначала — в Telegram.</p>
 </section>
 
 <section id="how">
@@ -77,53 +78,52 @@
   <p class="sub">Три шага, которые заменяют ручной ввод.</p>
   <div class="grid">
     <div class="card">
-      <h3>1. Загружаете фото</h3>
-      <p>Из Telegram, почты или с телефона. PDF, JPG, PNG — до 20 МБ.</p>
+      <h3>1. Присылаете фото</h3>
+      <p>Из Telegram или с телефона. JPG, PNG, PDF — до 20 МБ.</p>
     </div>
     <div class="card">
       <h3>2. Получаете JSON</h3>
-      <p>Позиции, количество, цены, ставка НДС, итог, реквизиты продавца.</p>
+      <p>Позиции, количество, цены, итог, УНП, РН СККО, продавец, дата.</p>
     </div>
     <div class="card">
       <h3>3. Загружаете в 1С</h3>
-      <p>Обработка заполняет документ. Или вебхук сам присылает результат.</p>
+      <p>Обработка заполняет документ. Или вы получаете файл и вставляете сами.</p>
     </div>
   </div>
 </section>
 
 <section id="api">
   <h2>Что приходит в ответе</h2>
-  <p class="sub">Один POST-запрос — и готовые данные документа.</p>
+  <p class="sub">Реальный чек: 20,00 BYN, идентификатор взят из QR-кода.</p>
 <pre><span class="pre-c">POST</span> /api/v1/documents/parse
 <span class="pre-c">X-API-Key:</span> dp_ваш_ключ
 <span class="pre-c">Content-Type:</span> multipart/form-data
 
 <span class="pre-c">→ 200 OK</span>
 {
-  <span class="k">"document_type"</span>: <span class="pre-c">"receipt_kkt"</span>,
-  <span class="k">"status"</span>: <span class="pre-c">"completed"</span>,
-  <span class="k">"total_sum"</span>: <span class="pre-c">"1240.00"</span>,
-  <span class="k">"seller"</span>: {
-    <span class="k">"name"</span>: <span class="pre-c">"ИП Иванов И.И."</span>,
-    <span class="k">"inn"</span>: <span class="pre-c">"7701234567"</span>
-  },
+  <span class="k">"country"</span>: <span class="pre-c">"BY"</span>,
+  <span class="k">"seller"</span>: { <span class="k">"name"</span>: <span class="pre-c">"ИП Рощина Татьяна"</span>, <span class="k">"unp"</span>: <span class="pre-c">"790730816"</span> },
+  <span class="k">"rn_skko"</span>: <span class="pre-c">"719014711"</span>,
+  <span class="k">"document_number"</span>: <span class="pre-c">"1539"</span>,
+  <span class="k">"date"</span>: <span class="pre-c">"2026-09-24"</span>, <span class="k">"time"</span>: <span class="pre-c">"15:12:23"</span>,
+  <span class="k">"total_sum"</span>: <span class="pre-c">20.0</span>, <span class="k">"currency"</span>: <span class="pre-c">"BYN"</span>,
   <span class="k">"items"</span>: [
-    { <span class="k">"name"</span>: <span class="pre-c">"Молоко 3.2%"</span>, <span class="k">"price"</span>: <span class="pre-c">"89.00"</span>,
-      <span class="k">"quantity"</span>: <span class="pre-c">"2"</span>, <span class="k">"vat_rate"</span>: <span class="pre-c">"10"</span> },
-    { <span class="k">"name"</span>: <span class="pre-c">"Хлеб Бородинский"</span>, <span class="k">"price"</span>: <span class="pre-c">"59.00"</span>,
-      <span class="k">"quantity"</span>: <span class="pre-c">"3"</span>, <span class="k">"vat_rate"</span>: <span class="pre-c">"10"</span> }
+    { <span class="k">"name"</span>: <span class="pre-c">null</span>, <span class="k">"quantity"</span>: <span class="pre-c">1.0</span>,
+      <span class="k">"price"</span>: <span class="pre-c">20.0</span>, <span class="k">"sum"</span>: <span class="pre-c">20.0</span> }
   ],
-  <span class="k">"processing_time_ms"</span>: <span class="pre-c">1840</span>
+  <span class="k">"ui"</span>: <span class="pre-c">"63288429a8fec2242adb4b37"</span>,
+  <span class="k">"trustworthy"</span>: <span class="pre-c">true</span>
 }</pre>
 </section>
 
 <section>
   <h2>Какие документы понимаем</h2>
-  <p class="sub">Начинаем с чеков ККТ — это 80% ручного ввода.</p>
+  <p class="sub">Сейчас работают чеки ККТ — это основной ручной ввод.</p>
   <div class="grid">
-    <div class="card"><h3>Чек ККТ <span class="tag">работает</span></h3><p>Фото чека, в том числе с QR-кодом — данные сверяются с ФНС.</p></div>
-    <div class="card"><h3>УПД / УКД <span class="tag">скоро</span></h3><p>Универсальный передаточный документ, включая электронный XML.</p></div>
+    <div class="card"><h3>Чек ККТ РБ <span class="tag">работает</span></h3><p>Фото чека: читаем QR, УНП, РН СККО, позиции, итог.</p></div>
+    <div class="card"><h3>Товарный чек <span class="tag">скоро</span></h3><p>Товарно-заготовительные документы.</p></div>
     <div class="card"><h3>Счёт-фактура <span class="tag">скоро</span></h3><p>Разбор НДС по ставкам, позиции и реквизиты сторон.</p></div>
+
     <div class="card"><h3>Акт работ <span class="tag">скоро</span></h3><p>Для подряда и услуг — частый случай у аутсорсеров.</p></div>
   </div>
 </section>
@@ -133,10 +133,10 @@
   <p class="sub">Начните бесплатно. Перейдёте на платный, когда бухгалтер поймёт экономию.</p>
   <table>
     <tr><th>Тариф</th><th>Документов в месяц</th><th>Ключей API</th><th class="num">Цена</th></tr>
-    <tr><td><b>Free</b></td><td>50</td><td>1</td><td class="num">0 ₽</td></tr>
-    <tr><td>Starter</td><td>1 000</td><td>3</td><td class="num">2 900 ₽</td></tr>
-    <tr><td>Pro</td><td>10 000</td><td>10</td><td class="num">9 900 ₽</td></tr>
-    <tr><td>Business</td><td>50 000</td><td>неограничено</td><td class="num">29 900 ₽</td></tr>
+    <tr><td><b>Free</b></td><td>50</td><td>1</td><td class="num">0 BYN</td></tr>
+    <tr><td>Starter</td><td>1 000</td><td>3</td><td class="num">9 BYN</td></tr>
+    <tr><td>Pro</td><td>10 000</td><td>10</td><td class="num">29 BYN</td></tr>
+    <tr><td>Business</td><td>50 000</td><td>неограничено</td><td class="num">89 BYN</td></tr>
   </table>
   <p class="note" style="margin-top:14px">Списание идёт по факту обработки документа. Неиспользованный остаток не сгорает.</p>
 </section>
@@ -154,7 +154,7 @@
 <section id="start">
   <h2>Начать</h2>
   <div class="warn" style="margin-bottom:20px">
-    Сервис в тестовом режиме: оплата не списывается, данные чека не покидают контур запроса.
+    Сервис в тестовом режиме: оплата не списывается, первые 10 чеков — бесплатно.
   </div>
   <p>Пришлите фото чека в Telegram — разберу и верну JSON, чтобы вы оценили результат на своих документах.</p>
   <div class="cta">
@@ -167,9 +167,9 @@
 <section>
   <h2>Вопросы</h2>
   <div class="faq"><b>Это не заменит бухгалтера?</b><p>Нет. Мы заполняем поля, решение принимает человек. Ценность — в снятии ручного ввода, а не в замене учёта.</p></div>
-  <div class="faq"><b>Что если чек плохо сфотографирован?</b><p>Позиции считываются с QR-кода через ФНС — качество фото влияет меньше, чем кажется.</p></div>
+  <div class="faq"><b>Что если чек плохо сфотографирован?</b><p>Идентификатор документа берётся из QR-кода — он читается даже на мятой бумаге и при плохом свете. Если сумма не подтверждается второй строкой чека, мы честно помечаем результат как непроверенный, а не выдумываем цифры.</p></div>
   <div class="faq"><b>Можно ли в 1С?</b><p>Да, это основной сценарий. Готовая обработка заполняет документ из ответа API. Инструкция — в документации.</p></div>
-  <div class="faq"><b>Где хранятся данные?</b><p>Файл обрабатывается и результат возвращается в ответе. Документы живут в вашей базе, не в нашей.</p></div>
+  <div class="faq"><b>Где хранятся данные?</b><p>Файл обрабатывается и результат возвращается в ответе. Загруженные файлы живут на сервере, пока вы их не удалите.</p></div>
 </section>
 
 <footer>
