@@ -48,6 +48,27 @@ _TRANSLIT = str.maketrans(
 _MONEY_RE = re.compile(r"(\d[\d\s.,]*\d|\d)")
 _SUM_RE = _MONEY_RE
 
+# A number as printed on a receipt: `3,15`, `1 250,00`, `0,93`.
+# The space is only a separator when exactly three digits follow, otherwise
+# `2,89 2,89` on one line would be read as a single absurd figure. Spaces around
+# the decimal mark are tolerated because OCR inserts them freely (`45, 00`).
+_NUMBER_RE = re.compile(r"\d+(?:[  ]\d{3})*[  ]?[.,][  ]?\d+|\d+(?:[  ]\d{3})*")
+
+# Lines that look like amounts but are not sale lines.
+_NON_ITEM_LABELS = (
+    "Скидка",
+    "Начислено",
+    "Бонус",
+    "Сдача",
+    "Оплата",
+    "Наличными",
+    "К оплате",
+    "Итого",
+    "Всего",
+    "Позиция",
+)
+
+
 
 def _looks_like_amount(raw: str) -> bool:
     """Receipt amounts always carry two decimals, e.g. `20,00`.
@@ -76,8 +97,9 @@ def _money(value: str) -> float | None:
         cleaned = cleaned.replace(thousands, "").replace(dec, ".")
     elif "," in cleaned:
         head, _, tail = cleaned.rpartition(",")
-        # `1,50` is a decimal, `1,500` is a thousands separator.
-        cleaned = f"{head}.{tail}" if len(tail) == 2 else cleaned.replace(",", "")
+        # A thousands group is exactly three digits. `1,000` is a thousand,
+        # `3,2%` is three point two, `1,50` is one point five.
+        cleaned = cleaned.replace(",", "") if len(tail) == 3 else f"{head}.{tail}"
     digits = re.sub(r"[^0-9.]", "", cleaned)
     if not digits or digits.count(".") > 1:
         return None
@@ -182,6 +204,8 @@ def _total_candidates(lines: list[str]) -> list[tuple[str, float, bool]]:
         ("ИТОГО К ОПЛАТЕ", "ИТОГО", "ВСЕГО К ОПЛАТЕ"),
         ("Сумма наличными",),
         ("Наличными",),
+        # A card payment line restates the same figure, so it corroborates too.
+        ("Оплата картой", "Оплата карты", "Картой", "Банковской картой"),
     )
     found: list[tuple[str, float, bool]] = []
     for labels in groups:
@@ -299,16 +323,26 @@ def _quantity_candidates(token: str) -> list[float]:
 
 
 def _resolve_row(numbers: list[str]) -> dict[str, Any] | None:
-    """Build one item row, using `quantity * price = sum` to settle ambiguity."""
+    """Build one item row, using `quantity * price = sum` to settle ambiguity.
+
+    A description may carry its own figures (`3,2%`, `0,93л`, `250г`). The sale
+    group is always the trailing `qty x price sum`, so only the last three
+    numbers are considered.
+    """
+    if len(numbers) > 3:
+        numbers = numbers[-3:]
+
     amounts = [(token, _money(token)) for token in numbers]
     amounts = [(token, value) for token, value in amounts if value is not None]
     if not amounts:
         return None
 
     line_total = amounts[-1][1]
-    row: dict[str, Any] = {"sum": line_total, "price": line_total}
+    row: dict[str, Any] = {"sum": line_total}
 
     if len(amounts) < 2:
+        # A single figure on the line is both the price and the line total.
+        row["price"] = line_total
         return row
 
     qty_token = amounts[0][0]
@@ -319,10 +353,55 @@ def _resolve_row(numbers: list[str]) -> dict[str, Any] | None:
             row["price"] = price
             return row
 
-    # No reading multiplies out: report the plain values rather than guessing.
+    # Nothing multiplies out, so the middle figure is not reliably the price.
+    # Reporting a zero here would be inventing a number the receipt never had.
     row["quantity"] = _money(qty_token)
-    row["price"] = price
     return row
+
+
+
+def _split_row(line: str) -> tuple[str | None, list[str]] | None:
+    """Split an item line into its description and printed numbers.
+
+    A sale line is `description  qty x price  sum`. Numbers that belong to the
+    description (`3,2%`, `0,93л`, `1кг`) precede that group, so the name is
+    taken as everything before the last three numbers rather than before the
+    first.
+    """
+    matches = [m for m in _NUMBER_RE.finditer(line) if _digits(m.group(0))]
+    if not matches:
+        return None
+
+    if len(matches) >= 3:
+        name = line[: matches[-3].start()]
+    else:
+        name = line[: matches[0].start()]
+
+    return name.strip(" .,;") or None, [m.group(0) for m in matches]
+
+
+def _find_discount(lines: list[str]) -> float:
+    """Total discount printed on the receipt.
+
+    A fully discounted purchase has lines summing to the original price while
+    the total is zero, so without this the arithmetic check would cry wolf.
+    """
+    total = 0.0
+    for line in lines:
+        if not _has_label(line, ("Скидка", "Скидка составила")):
+            continue
+        canon = _canon(line)
+        label = "Скидка составила" if _canon("Скидка составила").lower() in canon.lower() else "Скидка"
+        idx = canon.lower().find(_canon(label).lower())
+        if idx == -1:
+            continue
+        match = _MONEY_RE.search(line[idx + len(label) :])
+        if not match:
+            continue
+        amount = _money(match.group(1))
+        if amount:
+            total += amount
+    return round(total, 2)
 
 
 def _find_items(lines: list[str], total: float | None) -> list[dict[str, Any]]:
@@ -339,18 +418,18 @@ def _find_items(lines: list[str], total: float | None) -> list[dict[str, Any]]:
     for line in lines[start + 1 :]:
         if _has_label(line, ("ИТОГО", "ВСЕГО", "Сумма наличными", "Кассир", "Дата")):
             break
-        if _has_label(line, ("Позиция", "Позици")):
+        if _has_label(line, ("Позиция", "Позици")) or _has_label(line, _NON_ITEM_LABELS):
             continue
 
-        numbers = [n for n in re.findall(r"\d[\d\s.,]*", line) if _digits(n)]
-        if not numbers:
+        split = _split_row(line)
+        if split is None:
             continue
+        name, numbers = split
 
-        name = re.split(r"\d[\d\s.,]*", line, maxsplit=1)[0].strip(" .,;")
         row = _resolve_row(numbers)
         if row is None:
             continue
-        row["name"] = name or None
+        row["name"] = name
         items.append(row)
 
     return items
@@ -373,19 +452,25 @@ def parse_belarusian_receipt(text: str, ui_hint: str | None = None) -> dict[str,
     when = _find_datetime(lines)
 
     parsed_sum = sum(r["sum"] for r in items if r.get("sum"))
+    discount = _find_discount(lines)
+
+    # A total is believed when the line items add up to it, or when two
+    # separately printed totals agree. One uncorroborated line is not enough:
+    # that is exactly the shape of a silent misread.
+    items_reconciled: bool | None
     if items:
         # With no line items there is nothing to check the total against, so
         # reconciliation is unknown rather than passed.
-        reconciled: bool | None = abs(parsed_sum - total) < 0.01 if total is not None else None
+        items_reconciled = abs(parsed_sum - discount - total) < 0.01 if total is not None else None
     else:
-        reconciled = None
+        items_reconciled = None
 
-    # A total is believed when either the line items add up to it, or two
-    # separately printed totals agree. One uncorroborated line is not enough:
-    # that is exactly the shape of a silent misread.
-    verified = reconciled is True
-    corroborated = totals_agree is True and total_lines >= 2
-    trustworthy = bool(total is not None and (verified or corroborated))
+    total_trustworthy = bool(
+        total is not None and (items_reconciled is True or (totals_agree is True and total_lines >= 2))
+    )
+    # The total and the line items are judged separately: OCR often mangles the
+    # items while the printed total stays legible, and vice versa.
+    trustworthy = bool(total_trustworthy and items_reconciled is not False)
 
 
     return {
@@ -403,10 +488,12 @@ def parse_belarusian_receipt(text: str, ui_hint: str | None = None) -> dict[str,
         "ui": _find_ui(lines, ui_hint),
         "complete": bool(total is not None and seller["name"] and seller["unp"]),
         "trustworthy": trustworthy,
+        "total_trustworthy": total_trustworthy,
+        "items_reconciled": items_reconciled,
         "totals_agree": totals_agree,
         "total_lines": total_lines,
-        "reconciled": reconciled,
         "items_sum": round(parsed_sum, 2) if items else None,
+        "discount": discount or None,
         "raw_text": text,
     }
 

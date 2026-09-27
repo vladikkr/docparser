@@ -97,13 +97,20 @@ class TestItems:
         assert len(receipt["items"]) == 1
 
     def test_quantity_is_ambiguity_resolved(self, receipt: dict) -> None:
-        # `1,000x20,00` is one unit at 20.00, not 1000 units.
-        assert receipt["items"][0]["quantity"] == 1.0
+        # The printed line is `1,000x20,00BYN 20,00`; OCR turned the price into
+        # `20, СОВУМ`. The sum survives, and the quantity is fixed by
+        # `quantity x 20,00 = 20,00`.
+        row = receipt["items"][0]
+        assert row["quantity"] == 1.0
+        assert row["sum"] == 20.0
+
+    def test_price_survives_mangled_decimal_separator(self, receipt: dict) -> None:
+        # `20, СОВУМ` has no readable decimals, yet `1 x 20,00 = 20,00` still
+        # identifies the price, so it is reported rather than dropped.
         assert receipt["items"][0]["price"] == 20.0
-        assert receipt["items"][0]["sum"] == 20.0
 
     def test_items_reconcile_with_total(self, receipt: dict) -> None:
-        assert receipt["reconciled"] is True
+        assert receipt["items_reconciled"] is True
         assert receipt["items_sum"] == pytest.approx(receipt["total_sum"])
 
 
@@ -184,7 +191,7 @@ class TestTrustworthiness:
         )
         assert result["items"] == []
         # Vacuously "equal" would be a lie: there is nothing to compare against.
-        assert result["reconciled"] is None
+        assert result["items_reconciled"] is None
         # Two separately printed totals agreeing is real corroboration.
         assert result["trustworthy"] is True
 
@@ -195,6 +202,6 @@ class TestTrustworthiness:
         )
         result = parse_belarusian_receipt(text)
         assert result["items"]
-        assert result["reconciled"] is False
+        assert result["items_reconciled"] is False
         assert result["trustworthy"] is False
 

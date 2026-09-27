@@ -206,14 +206,17 @@ def _summarise(result: dict) -> str:
                 f"   - {row.get('name') or '(без названия)'} | "
                 f"{row.get('quantity', '?')} x {row.get('price', '?')} = {row.get('sum', '?')}"
             )
-        if items and not data.get("reconciled"):
+        if items and data.get("items_reconciled") is False:
             lines.append(
-                f"   ВНИМАНИЕ: сумма позиций {data.get('items_sum')} не совпадает с итогом"
+                f"   ВНИМАНИЕ: позиции на {data.get('items_sum')} не сходятся с итогом"
+                f" ({total}) — сверьте построчно"
             )
+        if data.get("discount"):
+            lines.append(f"   Скидка:    {data['discount']}")
+        if data.get("total_trustworthy") is False:
+            lines.append("   ВНИМАНИЕ: итог подтверждён только одной строкой чека")
         if not data.get("trustworthy"):
-            lines.append(
-                "   ВНИМАНИЕ: цифры НЕ подтверждены второй строкой чека — сверьте вручную"
-            )
+            lines.append("   ВНИМАНИЕ: данные НЕ подтверждены — сверьте вручную")
         if result.get("warning"):
             lines.append(f"Внимание:  {result['warning']}")
     elif method == "qr":
