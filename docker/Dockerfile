@@ -2,25 +2,24 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
+    libpq5 \
     poppler-utils \
     tesseract-ocr \
     tesseract-ocr-rus \
-    libgl1-mesa-glx \
+    tesseract-ocr-eng \
+    libmagic1 \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY pyproject.toml poetry.lock ./
-RUN pip install --no-cache-dir poetry && \
-    poetry config virtualenvs.create false && \
-    poetry install --only=main --no-interaction
+COPY requirements.txt .
 
-# Copy application code
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-# Run migrations and start
-CMD ["sh", "-c", "alembic upgrade head && gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000"]
+EXPOSE 8000
+
+CMD ["sh", "-c", "alembic upgrade head && gunicorn app.main:app --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120"]
