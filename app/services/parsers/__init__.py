@@ -25,8 +25,12 @@ def register_parsers(db) -> None:
         DocumentType.SELFEMPLOYED: SelfEmployedParser(db),
     }
 
-def get_parser(doc_type: DocumentType, db) -> BaseParser:
-    """Get parser for document type, creating if needed"""
+def get_parser(doc_type: DocumentType, db) -> BaseParser | None:
+    """Get a parser for a document type, registering the set on first use.
+
+    Returns None for a type that has no parser, such as the `unknown` sentinel,
+    so every caller has to check the result rather than call straight through.
+    """
     if doc_type not in PARSER_REGISTRY:
         register_parsers(db)
     return PARSER_REGISTRY.get(doc_type)
