@@ -87,6 +87,17 @@ class Settings(BaseSettings):
     # a mounted volume keeps the files across restarts.
     UPLOAD_DIR: str = "./storage"
 
+    # Telegram bot. The bot runs on our own machine over long polling, so it
+    # needs no public HTTPS endpoint and no paid hosting.
+    TELEGRAM_BOT_TOKEN: str = ""
+    # Telegram numeric user id of the owner. Only this account sees the
+    # approve/deny buttons and the payment requests.
+    TELEGRAM_ADMIN_ID: int = 0
+    # Free documents before the bot asks the owner for a paid access.
+    TELEGRAM_TRIAL_LIMIT: int = 3
+    TELEGRAM_STATE_FILE: str = "./storage/bot_users.json"
+    TELEGRAM_MAX_FILE_MB: int = 20
+
     @property
     def stripe_configured(self) -> bool:
         return bool(self.STRIPE_SECRET_KEY)
@@ -94,6 +105,14 @@ class Settings(BaseSettings):
     @property
     def redis_configured(self) -> bool:
         return bool(self.REDIS_URL) and "localhost" not in self.REDIS_URL
+
+    @property
+    def telegram_configured(self) -> bool:
+        return bool(self.TELEGRAM_BOT_TOKEN)
+
+    @property
+    def telegram_admin_configured(self) -> bool:
+        return self.TELEGRAM_ADMIN_ID > 0
 
 
 settings = Settings()

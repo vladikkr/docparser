@@ -1,0 +1,4 @@
+# Telegram bot runs separately from the API so the Docker image stays lean.
+# Install with:  pip install -r requirements-bot.txt
+-r requirements.txt
+python-telegram-bot>=21.0
