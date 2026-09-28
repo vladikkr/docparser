@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>DocParser — разбор чеков ККТ Беларуси в JSON</title>
-<meta name="description" content="Превращает фото чека ККТ (УНП, РН СККО) в структурированный JSON: позиции, суммы, продавец, дата. Для бухгалтерии и 1С.">
+<title>DocParser — разбор чеков и УПД в JSON</title>
+<meta name="description" content="Превращает фото чека ККТ Беларуси и России и XML-файлы УПД, счёта-фактуры, ТОРГ-12 в структурированный JSON: позиции, суммы, НДС, продавец, покупатель. Для бухгалтерии и 1С.">
 <style>
   :root{--ink:#0f1720;--muted:#5b6b7a;--line:#e4e9ef;--bg:#fff;--accent:#1a6b4f;--accent2:#0f5132;--soft:#f6f9f8;--warn:#b45309}
   *{box-sizing:border-box}
@@ -60,17 +60,17 @@
 <div class="wrap">
 
 <section class="hero">
-  <h1>Фото чека ККТ → <em>готовый JSON</em></h1>
+  <h1>Чек или УПД → <em>готовый JSON</em></h1>
   <p class="lead">
-    Разбирает чеки белорусских магазинов и отдаёт структурированные данные:
-    позиции, суммы, продавец, УНП, РН СККО, дата и время. Бухгалтеру остаётся
-    нажать «создать документ».
+    Фото чека ККТ Беларуси и России, а также XML-файлы УПД, счёта-фактуры, УКД,
+    ТОРГ-12 и акта. На выходе — позиции, суммы, НДС, продавец и покупатель.
+    Бухгалтеру остаётся нажать «создать документ».
   </p>
   <div class="cta">
-    <a class="btn btn-p" href="#start">Попробовать — 10 чеков бесплатно</a>
+    <a class="btn btn-p" href="#start">Попробовать — 3 документа бесплатно</a>
     <a class="btn btn-s" href="#api">Посмотреть ответ</a>
   </div>
-  <p class="note" style="margin-top:14px">Без карты. Без регистрации. Сначала — в Telegram.</p>
+  <p class="note" style="margin-top:14px">Без карты. Без регистрации. Клиент просто пишет в Telegram-бот и присылает фото.</p>
 </section>
 
 <section id="how">
@@ -94,7 +94,7 @@
 
 <section id="api">
   <h2>Что приходит в ответе</h2>
-  <p class="sub">Два примера: белорусский чек (через QR/OCR) и российский чек (через ФНС API).</p>
+  <p class="sub">Три примера: белорусский чек (QR/OCR), российский чек (ФНС API) и УПД формата ФНС 5.03.</p>
   <pre><span class="pre-c">POST</span> /api/v1/documents/parse
 <span class="pre-c">X-API-Key:</span> dp_ваш_ключ
 <span class="pre-c">Content-Type:</span> multipart/form-data
@@ -129,6 +129,28 @@
       <span class="k">"price"</span>: <span class="pre-c">"89.00"</span>, <span class="k">"sum"</span>: <span class="pre-c">"178.00"</span>, <span class="k">"vat_rate"</span>: <span class="pre-c">"10"</span> }
   ],
   <span class="k">"trustworthy"</span>: <span class="pre-c">true</span>
+}
+
+<span class="pre-c">→ 200 OK (УПД, формат ФНС 5.03)</span>
+{
+  <span class="k">"document_type"</span>: <span class="pre-c">"upd"</span>, <span class="k">"country"</span>: <span class="pre-c">"RU"</span>,
+  <span class="k">"knd"</span>: <span class="pre-c">"1115131"</span>, <span class="k">"function"</span>: <span class="pre-c">"СЧФДОП"</span>,
+  <span class="k">"format_version"</span>: <span class="pre-c">"5.03"</span>,
+  <span class="k">"document_number"</span>: <span class="pre-c">"0000000123"</span>, <span class="k">"document_date"</span>: <span class="pre-c">"15.12.2024"</span>,
+  <span class="k">"seller"</span>: { <span class="k">"name"</span>: <span class="pre-c">"ООО \"ТехноСервис\""</span>, <span class="k">"inn"</span>: <span class="pre-c">"7701234567"</span> },
+  <span class="k">"buyer"</span>:  { <span class="k">"name"</span>: <span class="pre-c">"ООО \"Ромашка\""</span>, <span class="k">"inn"</span>: <span class="pre-c">"7709876543"</span> },
+  <span class="k">"items"</span>: [
+    { <span class="k">"line"</span>: <span class="pre-c">"1"</span>, <span class="k">"name"</span>: <span class="pre-c">"Молоко 3.2% 1л"</span>,
+      <span class="k">"quantity"</span>: <span class="pre-c">10.0</span>, <span class="k">"price"</span>: <span class="pre-c">89.0</span>,
+      <span class="k">"vat_rate"</span>: <span class="pre-c">"10%"</span>, <span class="k">"vat_sum"</span>: <span class="pre-c">80.91</span>,
+      <span class="k">"total_with_vat"</span>: <span class="pre-c">890.0</span> }
+  ],
+  <span class="k">"totals"</span>: {
+    <span class="k">"amount_without_vat"</span>: <span class="pre-c">2004.54</span>,
+    <span class="k">"vat_sum"</span>: <span class="pre-c">290.46</span>,
+    <span class="k">"total_with_vat"</span>: <span class="pre-c">2295.0</span>
+  },
+  <span class="k">"warnings"</span>: []
 }</pre>
 </section>
 
@@ -175,7 +197,7 @@
 <section id="start">
   <h2>Начать</h2>
   <div class="warn" style="margin-bottom:20px">
-    Сервис в тестовом режиме: оплата не списывается, первые 10 чеков — бесплатно.
+    Сервис в тестовом режиме: списание не работает, первые 3 документа — бесплатно.
   </div>
   <p>Клиенту не нужно ничего настраивать: он просто присылает фото в Telegram-бот и там же получает разобранные данные. Программировать не нужно.</p>
   <div class="cta">
