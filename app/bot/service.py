@@ -13,25 +13,34 @@ from typing import Any
 from app.bot.detect import Detection, detect
 
 # Document types the bot accepts and honestly reports as "in development".
-# Remove an entry here once the matching parser really returns the fields.
+# Remove an entry here once the matching parser really returns the fields;
+# `scripts/validate_all.py` is what decides that, not the parser's silence.
 PENDING_TYPES: dict[str, str] = {
-    "upd": "УПД",
-    "ukd": "УКД",
-    "invoice": "Счёт-фактура",
-    "invoice_correction": "Корректировочный счёт-фактура",
-    "act": "Акт выполненных работ",
-    "torg12": "ТОРГ-12",
-    "ttn": "Товарно-транспортная накладная",
     "selfemployed": "Чек самозанятого",
 }
 
 
 def _make_parser(doc_type: str):
     """Build the parser for a document type, or None when not ready yet."""
+    from app.models import DocumentType
+    from app.services.parsers import get_parser
+
     if doc_type == "receipt_kkt":
         from app.services.parsers.receipt_kkt import ReceiptKKTParser
 
         return ReceiptKKTParser(None)
+
+    mapping = {
+        "upd": DocumentType.UPD,
+        "ukd": DocumentType.UKD,
+        "invoice": DocumentType.INVOICE,
+        "invoice_correction": DocumentType.INVOICE_CORRECTION,
+        "torg12": DocumentType.TORG12,
+        "act": DocumentType.ACT,
+        "ttn": DocumentType.TTN,
+    }
+    if doc_type in mapping:
+        return get_parser(mapping[doc_type], None)
     return None
 
 

@@ -21,6 +21,7 @@ ALIASES = {
     "jose": "python-jose",
     "Crypto": "pycryptodome",
     "dotenv": "python-dotenv",
+    "telegram": "python-telegram-bot",
 }
 
 # Imports intentionally optional: guarded by try/except or lazy loaders.
@@ -34,12 +35,21 @@ REQUIRED_RUNTIMES = {
 }
 
 
-def declared_packages(path: pathlib.Path | None = None) -> set[str]:
+def declared_packages(path: pathlib.Path | None = None, *, follow_includes: bool = True) -> set[str]:
+    """Packages declared in a requirements file, following `-r other.txt`.
+
+    The bot ships its own requirements-bot.txt so the API Docker image stays
+    lean, so both files have to be read for the check to be truthful.
+    """
     target = path or REQUIREMENTS
-    packages = set()
+    packages: set[str] = set()
     for line in target.read_text(encoding="utf-8").splitlines():
         line = line.strip()
-        if not line or line.startswith("#") or line.startswith("-r"):
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("-r"):
+            if follow_includes:
+                packages |= declared_packages(target.parent / line[2:].strip())
             continue
         name = re.split(r"[<>=!~\[; ]", line)[0]
         packages.add(name.lower().replace("_", "-"))
@@ -64,6 +74,9 @@ def third_party_imports() -> set[tuple[str, str, int]]:
 
 def main() -> int:
     declared = declared_packages()
+    # The bot has its own file so the API image stays lean; it pulls in
+    # requirements.txt via `-r`, so this adds only what the bot adds.
+    declared |= declared_packages(REQUIREMENTS.parent / "requirements-bot.txt")
     dev_declared = declared_packages(REQUIREMENTS.parent / "requirements-dev.txt")
     missing: list[str] = []
 
@@ -73,7 +86,8 @@ def main() -> int:
             continue
         if module in OPTIONAL:
             continue
-        missing.append(f"{module} ({path}:{lineno}) -> add '{key}' to requirements.txt")
+        scope = "requirements-bot.txt" if "/app/bot/" in path.replace("\\", "/") else "requirements.txt"
+        missing.append(f"{module} ({path}:{lineno}) -> add '{key}' to {scope}")
 
     for package, reason in REQUIRED_RUNTIMES.items():
         key = package.lower().replace("_", "-")

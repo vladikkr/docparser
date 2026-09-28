@@ -1,27 +1,13 @@
-import structlog
+"""Счёт-фактура and корректировочный счёт-фактура.
 
-from app.models import Document, DocumentType
-from app.services.parsers.base import BaseParser
+ФНС publishes no separate schema for a счёт-фактура: it is the same document
+format as a УПД and the two are told apart by the `Функция` attribute. The
+implementation therefore lives with the rest of the invoice family in
+`upd.py`, and this module is the name the parser registry imports.
+"""
 
-logger = structlog.get_logger()
+from __future__ import annotations
 
+from app.services.parsers.upd import InvoiceCorrectionParser, InvoiceParser
 
-class InvoiceParser(BaseParser):
-    """Parser for Счёт-фактура / ИСФ"""
-
-    @property
-    def supported_types(self) -> list[DocumentType]:
-        return [DocumentType.INVOICE, DocumentType.INVOICE_CORRECTION]
-
-    async def parse(self, document: Document, file_bytes: bytes) -> Dict[str, Any]:
-        logger.warning("invoice_parser_not_implemented", document_id=str(document.id))
-        return {
-            "error": "Invoice parser not yet implemented",
-            "document_type": document.document_type.value,
-        }
-
-
-class InvoiceCorrectionParser(InvoiceParser):
-    @property
-    def supported_types(self) -> list[DocumentType]:
-        return [DocumentType.INVOICE_CORRECTION]
+__all__ = ["InvoiceParser", "InvoiceCorrectionParser"]

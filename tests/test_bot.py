@@ -13,36 +13,63 @@ import pytest
 
 from app.bot.detect import detect, detect_from_qr, detect_xml
 from app.bot.render import render, render_receipt
-from app.bot.service import PENDING_TYPES, process
+from app.bot.service import PENDING_TYPES, Outcome, process
 from app.bot.store import UserStore
 
 UPD_XML = (
     '<?xml version="1.0" encoding="UTF-8"?>'
-    '<Файл ВерсФорм="5.02" ИдФайл="ID" Схем="schemas" Имя="name" ИмяФорм="УПД">'
-    '<Документ КНД="1115131" Функция="СЧФ" Номер="12345" Дата="2024-12-15"/>'
-    "</Файл>"
+    '<Файл ИдФайл="ID" ВерсФорм="5.03" ВерсПрог="test">'
+    '<Документ КНД="1115131" Функция="СЧФДОП" ДатаИнфПр="15.12.2024" ВремИнфПр="12.30.00">'
+    '<СвСчФакт НомерДок="12345" ДатаДок="15.12.2024"/>'
+    "</Документ></Файл>"
 ).encode("utf-8")
 
 INVOICE_XML = (
     '<?xml version="1.0" encoding="UTF-8"?>'
-    '<Файл ВерсФорм="5.02" ИдФайл="ID" Схем="schemas" Имя="name" ИмяФорм="СФ">'
-    '<Документ КНД="1115130" Функция="СЧФ" Номер="56789" Дата="2024-12-15"/>'
-    "</Файл>"
+    '<Файл ИдФайл="ID" ВерсФорм="5.03" ВерсПрог="test">'
+    '<Документ КНД="1115131" Функция="СЧФ" ДатаИнфПр="18.01.2024" ВремИнфПр="16.45.00">'
+    '<СвСчФакт НомерДок="56789" ДатаДок="18.01.2024"/>'
+    "</Документ></Файл>"
+).encode("utf-8")
+
+# A УПД that only transfers goods, with no invoice data.
+TRANSFER_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<Файл ИдФайл="ID" ВерсФорм="5.03" ВерсПрог="test">'
+    '<Документ КНД="1115131" Функция="ДОП" ДатаИнфПр="15.12.2024" ВремИнфПр="12.30.00">'
+    '<СвСчФакт НомерДок="ТД-45" ДатаДок="15.12.2024"/>'
+    "</Документ></Файл>"
 ).encode("utf-8")
 
 CORRECTION_XML = (
     '<?xml version="1.0" encoding="UTF-8"?>'
-    '<Файл ВерсФорм="5.02" ИдФайл="ID" Схем="schemas" Имя="name" ИмяФорм="УПД">'
-    '<Документ КНД="1115131" Функция="ИСЧ" Номер="12345-И" Дата="2024-12-20"/>'
-    "</Файл>"
+    '<Файл ИдФайл="ID" ВерсФорм="5.02" ВерсПрог="test">'
+    '<Документ КНД="1115133" Функция="КСЧФ" ДатаИнфПр="20.12.2024" ВремИнфПр="09.15.00">'
+    '<СвКСчФ НомерДок="КСФ-12" ДатаДок="20.12.2024"><СчФ НомерСчФ="12345" ДатаСчФ="15.12.2024"/>'
+    "<ТаблКСчФ/></СвКСчФ>"
+    "</Документ></Файл>"
 ).encode("utf-8")
 
-# A real correction invoice points back at the document it corrects.
+# The correction schema also covers a corrected счёт-фактура, which is told
+# apart by the absence of the `ТаблКСчФ` goods table.
 CORRECTION_INVOICE_XML = (
     '<?xml version="1.0" encoding="UTF-8"?>'
-    '<Файл ВерсФорм="5.02" ИдФайл="ID" Схем="schemas" Имя="name" ИмяФорм="СФ">'
-    '<Документ КНД="1115130" Функция="ИСЧ" Номер="56789-И" Дата="2024-12-20"/>'
-    "</Файл>"
+    '<Файл ИдФайл="ID" ВерсФорм="5.02" ВерсПрог="test">'
+    '<Документ КНД="1115133" Функция="КСЧФ" ДатаИнфПр="20.12.2024" ВремИнфПр="09.15.00">'
+    '<СвКСчФ НомерДок="КСФ-99" ДатаДок="20.12.2024"><СчФ НомерСчФ="56789" ДатаСчФ="18.01.2024"/>'
+    "</СвКСчФ></Документ></Файл>"
+).encode("utf-8")
+
+TORG12_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<Файл ИдФайл="ID" ВерсФорм="5.02"><Документ КНД="1175010" ДатаИнфПр="15.12.2024">'
+    '<СвДокПТПр><ИдентДок НомДокПТ="Т-1" ДатаДокПТ="15.12.2024"/></СвДокПТПр></Документ></Файл>'
+).encode("utf-8")
+
+ACT_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>'
+    '<Файл ИдФайл="ID" ВерсФорм="5.02"><Документ КНД="1175012" ДатаИнфИсп="20.12.2024">'
+    '<СвДокПРУ><ИдентДок НомДокПРУ="А-1" ДатаДокПРУ="20.12.2024"/></СвДокПРУ></Документ></Файл>'
 ).encode("utf-8")
 
 
@@ -118,19 +145,27 @@ def test_bare_qr_id_means_a_belarusian_receipt():
 
 
 def test_upd_is_recognised_by_knd():
-    assert detect_xml(UPD_XML).doc_type == "upd"
+    assert detect_xml(TRANSFER_XML).doc_type == "upd"
 
 
-def test_invoice_is_recognised_by_knd():
+def test_invoice_is_told_apart_by_function_not_knd():
+    # Same КНД as a УПД; only `Функция` differs. СЧФ is a счёт-фактура, while
+    # СЧФДОП and ДОП are УПД, one of which also carries invoice data.
     assert detect_xml(INVOICE_XML).doc_type == "invoice"
+    assert detect_xml(UPD_XML).doc_type == "upd"
+    assert detect_xml(TRANSFER_XML).doc_type == "upd"
 
 
-def test_correction_function_marks_a_ukd():
+def test_torg12_and_act_are_recognised():
+    assert detect_xml(TORG12_XML).doc_type == "torg12"
+    assert detect_xml(ACT_XML).doc_type == "act"
+
+
+def test_correction_is_reported_as_the_single_format_it_is():
+    # ФНС ships one schema for a УКД and for a corrected счёт-фактура, and
+    # nothing in the file distinguishes them, so the bot must not guess.
     assert detect_xml(CORRECTION_XML).doc_type == "ukd"
-
-
-def test_correction_invoice_is_its_own_type():
-    assert detect_xml(CORRECTION_INVOICE_XML).doc_type == "invoice_correction"
+    assert detect_xml(CORRECTION_INVOICE_XML).doc_type == "ukd"
 
 
 def test_unknown_knd_is_reported_not_guessed():
@@ -152,20 +187,35 @@ def test_non_xml_file_falls_back_to_the_receipt_path():
 
 
 @pytest.mark.asyncio
-async def test_pending_format_is_honest_about_not_being_ready():
-    outcome = await process(UPD_XML)
+async def test_a_fixed_format_is_parsed_not_declared_pending():
+    # УПД, ТОРГ-12 and the act are implemented, so the bot must not apologise
+    # for them. A УПД with no goods table is still a valid parse.
+    outcome = await process(TRANSFER_XML)
 
-    assert not outcome.ok
+    assert outcome.ok
+    assert "в разработке" not in render(outcome)
+
+
+def test_a_pending_format_is_honest_about_not_being_ready():
+    # A чек самозанятого is a printout from "Мой налог", not an XML format, so
+    # there is deliberately no fixture for it: the message is what matters.
+    outcome = Outcome(
+        ok=False,
+        doc_type="selfemployed",
+        label="Чек самозанятого",
+        source="fallback",
+        error="not_implemented",
+        note="Чек самозанятого: формат принят, но парсер ещё не доведён до продакшена.",
+    )
+
     assert outcome.pending
-    assert "УПД" in outcome.note
     assert "не доведён" in render(outcome)
+    assert "не буду выдумывать цифры" in render(outcome)
 
 
-@pytest.mark.asyncio
-async def test_pending_formats_cover_every_unimplemented_type():
-    assert "upd" in PENDING_TYPES
-    assert "invoice" in PENDING_TYPES
-    assert "torg12" in PENDING_TYPES
+def test_pending_formats_cover_every_unimplemented_type():
+    # Everything else is implemented and asserted by scripts/validate_all.py.
+    assert set(PENDING_TYPES) == {"selfemployed"}
 
 
 @pytest.mark.asyncio

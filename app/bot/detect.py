@@ -1,9 +1,13 @@
 """Work out what the client actually sent us.
 
 Order matters: a fiscal QR is the most reliable signal, an XML root element is
-next, and OCR text is the last resort. The ФНС КНД codes below are the
-authoritative way to tell a УПД from a счёт-фактура, and `Функция` tells an
-original document from a correction.
+next, and OCR text is the last resort.
+
+The КНД code in the published XSDs is the authoritative signal, and it settles
+a question that is easy to get wrong: a счёт-фактура and a УПД are the *same*
+schema under КНД 1115131 and are told apart by the `Функция` attribute. There
+is no separate "счёт-фактура" element. A УПД that only transfers goods carries
+`Функция="ДОП"`; one that also carries invoice data carries СЧФ or СЧФДОП.
 """
 
 from __future__ import annotations
@@ -12,13 +16,23 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
-# КНД codes published by ФНС (приказ ЕД-7-26/970@, format 5.02/5.03).
-KND_UPD = "1115131"  # универсальный передаточный документ
-KND_INVOICE = "1115130"  # счёт-фактура
+from app.services.parsers.fns_xml import (
+    KND_ACT,
+    KND_CORRECTION,
+    KND_INVOICE_LIKE,
+    KND_INVOICE_LIKE_BUYER,
+    KND_TORG12,
+    document_root,
+    find_first,
+    function_of,
+    knd_of,
+    load_xml,
+    FnsParseError,
+)
 
-# Функция tells whether this is an original or a corrected document.
-ORIGINAL_FUNCTIONS = {"СЧФ", "СЧФДОП", "ДОП"}
-CORRECTION_FUNCTIONS = {"ИСЧ", "ИСФДОП", "КСФ", "КСФДОП"}
+# `Функция` values for the correction formats.
+CORRECTION_FUNCTIONS = {"КСЧФ", "КСЧФДИС", "ДИС", "СвИСРК", "СвИСЗК"}
+
 
 
 @dataclass
@@ -31,48 +45,39 @@ class Detection:
     note: str = ""
 
 
-def _localname(tag: str) -> str:
-    """Strip any XML namespace from a tag name."""
-    return tag.rsplit("}", 1)[-1]
-
-
-def _find_by_localname(element: ET.Element, name: str) -> ET.Element | None:
-    for node in element.iter():
-        if _localname(node.tag) == name:
-            return node
-    return None
-
-
 def detect_xml(data: bytes) -> Detection | None:
     """Read the ФНС XML structure: a <Файл> wrapper around a <Документ>."""
     try:
-        root = ET.fromstring(data)
-    except ET.ParseError:
+        root = load_xml(data)
+        knd = knd_of(root)
+    except FnsParseError:
         return None
 
-    root_name = _localname(root.tag)
+    knd = knd_of(root)
+    function = function_of(root).upper()
 
-    if root_name == "СчетФактура":
-        return Detection("invoice", "Счёт-фактура", "xml")
+    if knd == KND_INVOICE_LIKE_BUYER:
+        return Detection("invoice", "Счёт-фактура (титул покупателя)", "xml")
 
-    document = root if root_name == "Документ" else _find_by_localname(root, "Документ")
-    if document is None:
-        return Detection("unknown", "XML (не ФНС)", "xml", note=f"Корень <{root_name}>")
+    if knd == KND_CORRECTION:
+        # A УКД and a corrected счёт-фактура share one schema (приказ
+        # ЕД-1-26/29@), and nothing in the file says which one the sender
+        # meant, so they are reported as the single format they are.
+        return Detection(
+            "ukd", "УКД / корректировочный счёт-фактура", "xml", note=f"Функция={function}"
+        )
 
-    knd = (document.get("КНД") or "").strip()
-    function = (document.get("Функция") or "").strip().upper()
-
-    if knd == KND_UPD:
-        if function in CORRECTION_FUNCTIONS:
-            return Detection("ukd", "УКД (корректировочный УПД)", "xml", note=f"Функция={function}")
+    if knd == KND_INVOICE_LIKE:
+        # Same schema: only `Функция` says whether this is an invoice or a УПД.
+        if function == "СЧФ":
+            return Detection("invoice", "Счёт-фактура", "xml")
         return Detection("upd", "УПД", "xml", note=f"Функция={function or '—'}")
 
-    if knd == KND_INVOICE:
-        if function in CORRECTION_FUNCTIONS:
-            return Detection(
-                "invoice_correction", "Корректировочный счёт-фактура", "xml", note=f"Функция={function}"
-            )
-        return Detection("invoice", "Счёт-фактура", "xml")
+    if knd == KND_TORG12:
+        return Detection("torg12", "ТОРГ-12", "xml")
+
+    if knd == KND_ACT:
+        return Detection("act", "Акт выполненных работ", "xml")
 
     return Detection("unknown", "XML (неизвестный КНД)", "xml", note=f"КНД={knd or '—'}")
 

@@ -1,21 +1,14 @@
-import structlog
+"""Акт выполненных работ / оказанных услуг.
 
-from app.models import Document, DocumentType
-from app.services.parsers.base import BaseParser
+ФНС publishes this format under приказ ММВ-7-10/552@, and it shares its
+structure with ТОРГ-12 rather than with the invoice family: the work lines live
+in `<ОписРабот><Работа>` and the participants use `СвЮЛ`. The implementation
+therefore sits with ТОРГ-12 and ЭТрН in `tortorg.py`, and this module is the
+name the parser registry imports.
+"""
 
-logger = structlog.get_logger()
+from __future__ import annotations
 
+from app.services.parsers.tortorg import ActParser
 
-class ActParser(BaseParser):
-    """Parser for Акт выполненных работ / Услуг"""
-
-    @property
-    def supported_types(self) -> list[DocumentType]:
-        return [DocumentType.ACT]
-
-    async def parse(self, document: Document, file_bytes: bytes) -> Dict[str, Any]:
-        logger.warning("act_parser_not_implemented", document_id=str(document.id))
-        return {
-            "error": "Act parser not yet implemented",
-            "document_type": document.document_type.value,
-        }
+__all__ = ["ActParser"]

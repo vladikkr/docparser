@@ -141,10 +141,84 @@ def render_receipt(data: dict[str, Any]) -> str:
     return text[:MAX_MESSAGE]
 
 
+def _item_name(item: dict[str, Any]) -> Any:
+    return _first(item, "name", "НаимТов", "товар", "НаимРабот", "НаимГруз")
+
+
+def render_fns_document(data: dict[str, Any], label: str = "") -> str:
+    """Render a УПД, счёт-фактуру, ТОРГ-12 or an act."""
+    header = f"📄 {label or data.get('document_type') or 'Документ'}"
+    parts: list[str] = [header]
+
+    details = [
+        _line("Номер", data.get("document_number")),
+        _line("Дата", data.get("document_date")),
+        _line("КНД", data.get("knd")),
+        _line("Функция", data.get("function")),
+        _line("Формат", data.get("format_version")),
+        _line("Валюта", (data.get("currency") or {}).get("name") or (data.get("currency") or {}).get("code")),
+    ]
+    details = [d for d in details if d]
+    if details:
+        parts.append("\n".join(details))
+
+    for role, title in (("seller", "Продавец"), ("buyer", "Покупатель")):
+        party = data.get(role) or {}
+        name = party.get("name")
+        if name:
+            inn = f" (ИНН {party['inn']})" if party.get("inn") else ""
+            parts.append(f"{title}: {name}{inn}")
+
+    items = data.get("items") or []
+    if items:
+        parts.append(f"\n🧺 Позиций: {len(items)}")
+        for index, item in enumerate(items[:40], 1):
+            parts.append(f"{index}. {_item_name(item) or 'без названия'}")
+            row = []
+            for key, label_text in (
+                ("quantity", None),
+                ("price", None),
+                ("total_with_vat", "Итого"),
+            ):
+                value = item.get(key)
+                if value is None:
+                    continue
+                row.append(f"{label_text}: {value}" if label_text else str(value))
+            if item.get("vat_rate"):
+                row.append(f"НДС {item['vat_rate']}")
+            if row:
+                parts.append("    " + " · ".join(row))
+
+    totals = data.get("totals") or {}
+    for key, title in (
+        ("amount_without_vat", "Без НДС"),
+        ("vat_sum", "НДС"),
+        ("total_with_vat", "Итого"),
+    ):
+        value = totals.get(key)
+        if value is not None:
+            parts.append(f"{title}: {_money(value)}")
+
+    basis = data.get("basis") or {}
+    if basis.get("name") or basis.get("number"):
+        parts.append(
+            f"\n📎 Основание: {basis.get('name') or '—'} "
+            f"№ {basis.get('number') or '—'} от {basis.get('date') or '—'}"
+        )
+
+    warnings = data.get("warnings") or []
+    if warnings:
+        parts.append("\n⚠️ " + "\n⚠️ ".join(str(w) for w in warnings))
+
+    return "\n".join(parts)[:MAX_MESSAGE]
+
+
 def render(outcome) -> str:
     """Render any Outcome produced by app.bot.service.process."""
     if outcome.ok:
-        return render_receipt(outcome.data) if outcome.doc_type == "receipt_kkt" else str(outcome.data)
+        if outcome.doc_type == "receipt_kkt":
+            return render_receipt(outcome.data)
+        return render_fns_document(outcome.data.get("parsed", outcome.data), outcome.label)
 
     if outcome.pending:
         return (
