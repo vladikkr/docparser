@@ -49,6 +49,7 @@ class Structure(HTMLParser):
 
 
 def main() -> int:
+    sys.path.insert(0, str(ROOT))
     html = PAGE.read_text(encoding="utf-8")
 
     structure = Structure()
@@ -64,6 +65,17 @@ def main() -> int:
     for required in ("<title>", "Telegram-бот", "УПД", "ТОРГ-12"):
         if required not in html:
             problems.append(f"missing expected text: {required}")
+
+    # The bot grants TELEGRAM_TRIAL_LIMIT documents. The page used to promise
+    # "10 чеков бесплатно" in two places while the bot allowed three, and a
+    # client noticing the mismatch stops trusting every other number here.
+    from app.config import settings
+
+    trial = settings.TELEGRAM_TRIAL_LIMIT
+    if f"{trial} документа" not in html and f"{trial} документов" not in html:
+        problems.append(f"the page never states the real trial limit of {trial}")
+    if re.search(r"\b10\s+чеков?\b", html):
+        problems.append("the page still promises 10 free documents, which contradicts the bot")
 
     if problems:
         print("Landing page problems:")
