@@ -1,4 +1,4 @@
-"""Deliver one parsed receipt, ready to send.
+r"""Deliver one parsed receipt, ready to send.
 
 The operator's only job between a client sending a photo and the client getting
 an answer should be a single command. This runs the parse, writes the JSON
