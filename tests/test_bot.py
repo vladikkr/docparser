@@ -296,6 +296,75 @@ def test_message_fits_into_a_telegram_message():
     assert len(message) < 4096
 
 
+def test_startup_identifies_the_bot_without_crashing():
+    """`get_me` is a coroutine; forgetting to await it killed the bot on boot.
+
+    It then looked merely "silent" while the process had already died, so the
+    identity lookup has to stay an awaited call inside the polling loop.
+    """
+    import ast
+    import inspect
+    import pathlib
+
+    from app.bot import main as bot_main
+
+    assert inspect.iscoroutinefunction(bot_main.post_init), (
+        "post_init must be async so get_me is awaited on the polling loop"
+    )
+
+    source = pathlib.Path(bot_main.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    # No bare `get_me()` call may sit in a plain `def`, which is what silently
+    # produced "'coroutine' object has no attribute 'username'".
+    async_functions = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef)
+    }
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
+        if name != "get_me":
+            continue
+        owner = next(
+            (
+                parent.name
+                for parent in ast.walk(tree)
+                if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node in ast.walk(parent)
+            ),
+            None,
+        )
+        assert owner in async_functions, f"get_me() called in non-async {owner}"
+
+
+def test_preflight_rejects_a_missing_token(monkeypatch):
+    from app.bot import main as bot_main
+
+    monkeypatch.setattr(bot_main.settings, "TELEGRAM_BOT_TOKEN", "")
+    with pytest.raises(SystemExit):
+        bot_main._preflight()
+
+
+def test_handlers_register_without_a_network_call():
+    from app.bot.main import build_application
+
+    application = build_application()
+    # python-telegram-bot builds generic subclasses, so compare by type name.
+    kinds = {type(group[0]).__name__ for group in application.handlers.values()}
+
+    assert kinds <= {"CommandHandler", "MessageHandler", "CallbackQueryHandler"}
+    # Every command the help text mentions has to be wired to something.
+    for command in ("start", "help", "status", "id"):
+        assert any(
+            any(command in getattr(h, "commands", ()) for h in group)
+            for group in application.handlers.values()
+        ), f"/{command} is advertised but not registered"
+
+
 def test_ocr_fallback_shape_is_unwrapped():
     message = render_receipt(
         {

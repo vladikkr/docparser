@@ -88,3 +88,7 @@ poetry.lock
 node_modules/
 # Client results
 out/
+
+# Bot runtime output
+bot.log
+bot.err

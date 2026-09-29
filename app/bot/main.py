@@ -28,8 +28,22 @@ logging.getLogger("telegram").setLevel(logging.WARNING)
 logger = logging.getLogger("docparser.bot")
 
 
+async def post_init(application: Application) -> None:
+    """Print who we are, from inside the polling loop.
+
+    `get_me` is a coroutine, so it has to be awaited on the loop that
+    `run_polling` owns. Calling it from `main` without awaiting raised
+    "'coroutine' object has no attribute 'username'", which killed the bot on
+    startup and made it look silent.
+    """
+    me = await application.bot.get_me()
+    logger.info("bot_started username=%s id=%s", me.username, me.id)
+    print(f"Bot @{me.username} ({me.first_name}) is running. Press Ctrl+C to stop.")
+    print(f"Open https://t.me/{me.username} and send it a photo.")
+
+
 def build_application() -> Application:
-    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
+    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     app.add_handler(CommandHandler("start", handlers.cmd_start))
     app.add_handler(CommandHandler("help", handlers.cmd_help))
@@ -68,10 +82,7 @@ def main() -> None:
     _preflight()
 
     app = build_application()
-    me = app.bot.get_me()
-    logger.info("bot_started username=%s id=%s", me.username, me.id)
-    print(f"Bot @{me.username} is running. Press Ctrl+C to stop.")
-
+    # The identity is printed by post_init, once the polling loop owns the bot.
     app.run_polling(drop_pending_updates=True, close_loop=False)
 
 
