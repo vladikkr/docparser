@@ -27,6 +27,7 @@ CHECKS: list[tuple[str, str, bool]] = [
     ("imports declared", "scripts/check_requirements.py", False),
     ("python 3.12 compatibility", "scripts/check_py312_compat.py", False),
     ("landing page", "scripts/check_landing.py", False),
+    ("prices agree across docs", "scripts/check_prices.py", False),
     ("button labels in docs", "scripts/check_button_labels.py", False),
     ("document parsers", "scripts/validate_all.py", False),
     ("worker startup", "scripts/check_worker_startup.py", True),
