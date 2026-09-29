@@ -92,3 +92,4 @@ out/
 # Bot runtime output
 bot.log
 bot.err
+bot-service/
