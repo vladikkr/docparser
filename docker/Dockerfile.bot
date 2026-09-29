@@ -1,0 +1,52 @@
+# Image for the Telegram bot, which must be able to read photographed receipts.
+#
+# The API image deliberately ships without Tesseract to keep the build small.
+# A background worker has no such luxury: a photo of a receipt is the main
+# thing a client sends, so OCR has to be present or every cheque comes back
+# unparsed.
+#
+# The bot also needs no HTTP port at all. It opens a connection to Telegram and
+# asks for updates, so it never has to be reachable, which is why this runs on
+# Render as a background worker rather than a web service.
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONIOENCODING=utf-8 \
+    TESSERACT_CMD=/usr/bin/tesseract
+
+# rus is the language that matters; eng covers the mixed Latin product names and
+# the QR payloads. libzbar is what pyzbar links against for receipt QRs.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-rus \
+        tesseract-ocr-eng \
+        libzbar0 \
+        libgl1 \
+        libglib2.0-0 \
+        poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt requirements-ocr.txt requirements-bot.txt ./
+RUN pip install --upgrade pip \
+    && pip install -r requirements-ocr.txt \
+    && pip install -r requirements-bot.txt
+
+COPY . .
+
+# Fail the deploy rather than start a worker that cannot read anything: a bot
+# that answers "I could not read this" to every photo is worse than one that
+# never came up, because the client waits.
+RUN python -c "\
+from app.services.ocr import available_languages, ocr_available; \
+langs = available_languages(); \
+assert ocr_available(), 'tesseract is not reachable in this image'; \
+assert any('rus' in l for l in langs), f'no russian language pack: {langs}'; \
+print('tesseract ok, languages:', langs)"
+
+CMD ["python", "-m", "app.bot"]

@@ -44,3 +44,36 @@ services:
         value: https://proverkacheka.nalog.ru:9999/v1
       - key: SENTRY_DSN
         sync: false
+
+  # The Telegram bot runs as a background worker, not a web service. It asks
+  # Telegram for updates over an outgoing connection, so it needs no public
+  # address, and a worker on the free plan is not put to sleep the way a free
+  # web service is. That is the whole difference between a bot clients can
+  # reach and one that only answers while a console window is open.
+  - type: worker
+    name: docparser-bot
+    plan: free
+    region: frankfurt
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile.bot
+    dockerContext: .
+    autoDeploy: true
+    # Bot state is a small JSON file, so a restart loses nothing that matters
+    # and no database is needed for the worker itself.
+    disk:
+      name: bot-state
+      mountPath: /app/storage
+      sizeGB: 1
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ADMIN_ID
+        sync: false
+      - key: TELEGRAM_TRIAL_LIMIT
+        value: "3"
+      - key: TELEGRAM_STATE_FILE
+        value: /app/storage/bot_users.json
+      - key: OCR_LANG
+        value: rus+eng
+      - key: LOG_LEVEL
+        value: INFO

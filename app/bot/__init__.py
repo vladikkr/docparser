@@ -2,26 +2,14 @@
 
 The bot lets a client send a photo straight into the chat and get the parsed
 result back, so nothing has to be forwarded by hand. It talks to the same
-parsers as the HTTP API and runs on our own machine over long polling, which
-means no public HTTPS endpoint and no paid hosting.
+parsers as the HTTP API and runs as a background worker over long polling,
+which means no public HTTPS endpoint and no paid hosting.
 
-Run it with `python -m app.bot`. The entry point deliberately does not re-export
-`main` here: doing so shadowed the `app.bot.main` module, so `from app.bot
-import main` handed back the function instead of the module.
+Run it with `python -m app.bot`.
+
+This module deliberately re-exports nothing. Re-exporting `main`, `detect` or
+`process` shadows the submodules of the same name, so `from app.bot import
+detect` hands back the function while the module is still reachable by its
+attribute, and which one you get depends on the import style. That cost an hour
+of debugging twice, so imports are explicit: `from app.bot.detect import detect`.
 """
-
-from app.bot.detect import Detection, detect
-from app.bot.render import render, render_receipt
-from app.bot.service import Outcome, process
-from app.bot.store import BotUser, UserStore
-
-__all__ = [
-    "BotUser",
-    "Detection",
-    "Outcome",
-    "UserStore",
-    "detect",
-    "process",
-    "render",
-    "render_receipt",
-]

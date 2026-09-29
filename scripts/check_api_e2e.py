@@ -1,4 +1,4 @@
-﻿"""End-to-end: POST a real receipt photo to the API and check the parsed data.
+"""End-to-end: POST a real receipt photo to the API and check the parsed data.
 
 This is the path a hosted client uses. It failed silently before, because the
 upload recorded a path but never wrote the bytes.
