@@ -62,7 +62,15 @@ python scripts/check_worker_startup.py
 | `TELEGRAM_BOT_TOKEN` | новый токен от BotFather |
 | `TELEGRAM_ADMIN_ID` | твой числовой ID: `1518791519` |
 | `TELEGRAM_TRIAL_LIMIT` | `3` |
-| `TELEGRAM_STATE_FILE` | `/app/storage/bot_users.json` |
+| `TELEGRAM_STATE_FILE` | путь **внутри контейнера**: `/app/storage/bot_users.json` |
+
+Локально (у вас на машине) состояние лежит в `storage/bot_users.json` — не
+перепутайте с `/app/...`, это разные машины.
+
+> У воркера нет постоянного диска: файл состояния живёт в контейнере и
+> **сбрасывается при каждом пересоздании**. Для учёта клиентов этого хватает
+> (триал и выданный доступ), но история разборов не переживёт деплой. Если
+> понадобится — подключите диск Render и укажите его в `TELEGRAM_STATE_FILE`.
 
 `TELEGRAM_ADMIN_ID` уже вписан в твой локальный `.env`; значение выше — то
 самое, что бот подтвердил командой `/id`.
