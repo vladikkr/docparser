@@ -229,14 +229,18 @@
 
 <script>
   // Contact channel. Set the username here, in one place.
-  var TELEGRAM = "vladikskr";  // Telegram username without the @
-  var MSG = "Хочу попробовать разбор документов";
+  var TELEGRAM = "docparser_by_bot";  // bot username, so clients reach the parser directly
+  var OWNER = "vladikskr";  // a human, for questions and for paid access
+  var MSG = "Хочу разобрать документ";
 
   if (TELEGRAM) {
     var url = "https://t.me/" + TELEGRAM + "?text=" + encodeURIComponent(MSG);
     document.getElementById("cta-tg").href = url;
+    // The bot is where a client actually sends the file; the owner stays
+    // reachable for questions and to hand over paid access.
     document.getElementById("contact-tg").innerHTML =
-      'Telegram: <a href="' + url + '" rel="noopener">@' + TELEGRAM + "</a>";
+      'Бот: <a href="' + url + '" rel="noopener">@' + TELEGRAM + "</a>" +
+      (OWNER ? ' · Вопросы: <a href="https://t.me/' + OWNER + '" rel="noopener">@' + OWNER + "</a>" : "");
   } else {
     document.getElementById("cta-tg").href = "#start";
     document.getElementById("contact-tg").textContent = "Telegram: уточняется";

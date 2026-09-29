@@ -213,11 +213,67 @@ def render_fns_document(data: dict[str, Any], label: str = "") -> str:
     return "\n".join(parts)[:MAX_MESSAGE]
 
 
+def render_selfemployed(data: dict[str, Any]) -> str:
+    """Render a self-employed receipt, leading with the tax check.
+
+    The reason to look at this document at all is whether the НПД is right, so
+    the verdict comes before the figures.
+    """
+    parts = ["🧾 Чек самозанятого (НПД)"]
+
+    if data.get("person"):
+        parts.append(f"👤 {data['person']}")
+
+    details = [
+        _line("ИНН", data.get("inn")),
+        _line("Дата", data.get("date")),
+        _line("№ чека", data.get("document_number")),
+        _line("Услуга / товар", data.get("purpose")),
+    ]
+    details = [d for d in details if d]
+    if details:
+        parts.append("\n".join(details))
+
+    cost = data.get("cost")
+    rate = data.get("npd_rate")
+    npd = data.get("npd_sum")
+    money = [
+        f"Стоимость: {_money(cost, 'BYN')}" if cost is not None else None,
+        (
+            f"НПД {rate:g}%: {_money(npd, 'BYN')}"
+            if rate is not None and npd is not None
+            else (f"НПД {rate:g}%" if rate is not None else None)
+        ),
+    ]
+    money = [m for m in money if m]
+    if money:
+        parts.append("\n".join(money))
+
+    if data.get("total_sum") is not None:
+        parts.append(f"\n💰 <b>Итого: {_money(data['total_sum'], 'BYN')}</b>")
+
+    if data.get("reconciled") is True:
+        parts.append("\n✅ Налог сходится: НПД = ставка от стоимости, итог = стоимость + налог.")
+    elif data.get("reconciled") is False:
+        parts.append(
+            "\n🛑 <b>Такой чек принимать нельзя.</b>\n"
+            "Налог не соответствует сумме — попросите клиента показать заново."
+        )
+
+    warnings = data.get("warnings") or []
+    if warnings:
+        parts.append("\n" + "\n".join(f"⚠️ {w}" for w in warnings))
+
+    return "\n".join(parts)[:MAX_MESSAGE]
+
+
 def render(outcome) -> str:
     """Render any Outcome produced by app.bot.service.process."""
     if outcome.ok:
         if outcome.doc_type == "receipt_kkt":
             return render_receipt(outcome.data)
+        if outcome.doc_type == "selfemployed":
+            return render_selfemployed(outcome.data)
         return render_fns_document(outcome.data.get("parsed", outcome.data), outcome.label)
 
     if outcome.pending:

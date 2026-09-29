@@ -13,11 +13,9 @@ from typing import Any
 from app.bot.detect import Detection, detect
 
 # Document types the bot accepts and honestly reports as "in development".
-# Remove an entry here once the matching parser really returns the fields;
-# `scripts/validate_all.py` is what decides that, not the parser's silence.
-PENDING_TYPES: dict[str, str] = {
-    "selfemployed": "Чек самозанятого",
-}
+# Empty right now: every type in the registry has a parser that
+# scripts/validate_all.py or the receipt layouts actually exercise.
+PENDING_TYPES: dict[str, str] = {}
 
 
 def _make_parser(doc_type: str):
@@ -38,6 +36,7 @@ def _make_parser(doc_type: str):
         "torg12": DocumentType.TORG12,
         "act": DocumentType.ACT,
         "ttn": DocumentType.TTN,
+        "selfemployed": DocumentType.SELFEMPLOYED,
     }
     if doc_type in mapping:
         return get_parser(mapping[doc_type], None)

@@ -12,6 +12,7 @@ is no separate "счёт-фактура" element. A УПД that only transfers g
 
 from __future__ import annotations
 
+import io
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -118,6 +119,28 @@ def detect_from_qr(qr_string: str) -> Detection:
     return Detection("receipt_kkt", "Кассовый чек РБ", "qr", note="QR с УИ, ФНС не применим")
 
 
+def _detect_selfemployed(text: str) -> Detection | None:
+    """Tell a self-employed receipt from a кассовый one by its own wording.
+
+    There is no QR register behind it, so the words are the only signal: a
+    self-employed receipt always names the НПД, which a cash receipt never does.
+    """
+    lowered = text.lower()
+    for needle in ("нпд", "налог на профессиональный доход", "самозанят"):
+        if needle in lowered:
+            return Detection(
+                "selfemployed", "Чек самозанятого", "ocr-text", note=f"найдено «{needle}»"
+            )
+    return None
+
+
+def detect_from_text(text: str) -> Detection | None:
+    """Use OCR text to separate a self-employed receipt from a кассовый."""
+    if not text or not text.strip():
+        return None
+    return _detect_selfemployed(text)
+
+
 def detect(file_bytes: bytes, filename: str | None = None) -> Detection:
     """Best-effort classification of an incoming file."""
     head = file_bytes.lstrip(b"\xef\xbb\xbf \t\r\n")
@@ -137,6 +160,20 @@ def detect(file_bytes: bytes, filename: str | None = None) -> Detection:
         qr_string = decode_receipt_qr_bytes(file_bytes)
         if qr_string:
             return detect_from_qr(qr_string)
+    except Exception:
+        pass
+
+    # No QR: a self-employed receipt has none, so the wording decides. The OCR
+    # pass is slow, so it runs only when nothing else identified the file.
+    try:
+        from PIL import Image
+
+        from app.services.ocr import ocr_service
+
+        text = ocr_service.extract_full_text(Image.open(io.BytesIO(file_bytes)))
+        detected = detect_from_text(text)
+        if detected:
+            return detected
     except Exception:
         pass
 

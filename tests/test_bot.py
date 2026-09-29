@@ -13,7 +13,7 @@ import pytest
 
 from app.bot.detect import detect, detect_from_qr, detect_xml
 from app.bot.render import render, render_receipt
-from app.bot.service import PENDING_TYPES, Outcome, process
+from app.bot.service import PENDING_TYPES, Outcome, _make_parser, process
 from app.bot.store import UserStore
 
 UPD_XML = (
@@ -213,9 +213,44 @@ def test_a_pending_format_is_honest_about_not_being_ready():
     assert "не буду выдумывать цифры" in render(outcome)
 
 
-def test_pending_formats_cover_every_unimplemented_type():
-    # Everything else is implemented and asserted by scripts/validate_all.py.
-    assert set(PENDING_TYPES) == {"selfemployed"}
+def test_every_document_type_the_bot_advertises_has_a_parser():
+    """No type may sit in the "in development" list while a client can reach it.
+
+    An earlier version asserted only that the list contained selfemployed, so
+    emptying it passed silently. The list is now compared against the registry
+    the bot actually routes through.
+    """
+    assert PENDING_TYPES == {}
+
+    for name in (
+        "receipt_kkt",
+        "upd",
+        "ukd",
+        "invoice",
+        "invoice_correction",
+        "torg12",
+        "act",
+        "ttn",
+        "selfemployed",
+    ):
+        assert name not in PENDING_TYPES
+        assert _make_parser(name) is not None, f"{name} has no parser but is offered"
+
+
+def test_a_pending_format_is_honest_about_not_being_ready():
+    """The wording stays in place for any format that regresses."""
+    outcome = Outcome(
+        ok=False,
+        doc_type="something_new",
+        label="Новый формат",
+        source="xml",
+        error="not_implemented",
+        note="Новый формат: формат принят, но парсер ещё не доведён до продакшена.",
+    )
+
+    assert outcome.pending
+    assert "не доведён" in render(outcome)
+    assert "не буду выдумывать цифры" in render(outcome)
 
 
 @pytest.mark.asyncio
