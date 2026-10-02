@@ -48,7 +48,11 @@ def create_app() -> FastAPI:
             sentry_sdk.init(
                 dsn=settings.SENTRY_DSN,
                 integrations=[
-                    FastApiIntegration(auto_enable=True),
+                    # No auto_enable: that keyword does not exist on the
+                    # installed SDK, so passing it raised TypeError, the broad
+                    # except below swallowed it, and Sentry silently never
+                    # initialised at all.
+                    FastApiIntegration(),
                     SqlalchemyIntegration(),
                 ],
                 traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
@@ -56,7 +60,9 @@ def create_app() -> FastAPI:
             )
             logger.info("sentry_initialized")
         except Exception as exc:
-            logger.warning("sentry_init_failed", error=str(exc))
+            # Monitoring must never stop the app from booting, but staying quiet
+            # here is what hid the failure above, so say it loudly.
+            logger.error("sentry_init_failed", error=str(exc))
 
     # CORS
     app.add_middleware(

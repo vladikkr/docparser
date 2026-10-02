@@ -1,6 +1,5 @@
 from typing import Any, Literal
 
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -75,6 +74,10 @@ class Settings(BaseSettings):
     WEBHOOK_TIMEOUT: int = 10
     WEBHOOK_MAX_RETRIES: int = 3
     WEBHOOK_RETRY_DELAYS: list[int] = [60, 300, 900]
+    # Signs the webhooks we send to customers. It must be its own secret: the
+    # Stripe webhook secret has a different job, and handing that one to
+    # customers so they could verify our callbacks would leak it.
+    WEBHOOK_SIGNING_SECRET: str = ""
 
     SENTRY_DSN: str | None = None
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1
@@ -109,6 +112,15 @@ class Settings(BaseSettings):
     @property
     def telegram_configured(self) -> bool:
         return bool(self.TELEGRAM_BOT_TOKEN)
+
+    @property
+    def webhooks_configured(self) -> bool:
+        """Whether outgoing webhooks can be signed at all.
+
+        With no signing secret every callback would carry a signature made from
+        an empty key, which looks valid and protects nothing.
+        """
+        return bool(self.WEBHOOK_SIGNING_SECRET)
 
     @property
     def telegram_admin_configured(self) -> bool:

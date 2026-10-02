@@ -7,7 +7,6 @@ reporting rather than a pixel-perfect reading of someone else's layout.
 
 from __future__ import annotations
 
-import asyncio
 import pathlib
 import sys
 

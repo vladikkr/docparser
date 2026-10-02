@@ -1,7 +1,5 @@
 import json
 import time
-import uuid
-from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -24,6 +22,7 @@ from app.schemas import (
 )
 from app.services import storage
 from app.services.dispatcher import dispatch_parse
+from app.utils.helpers import utcnow
 
 logger = structlog.get_logger()
 
@@ -141,7 +140,7 @@ async def parse_document_sync(
     document.error_message = error
     document.processing_time_ms = elapsed_ms
     document.status = DocumentStatus.FAILED if error else DocumentStatus.COMPLETED
-    document.completed_at = datetime.utcnow()
+    document.completed_at = utcnow()
     await db.commit()
     await db.refresh(document)
 
@@ -170,9 +169,10 @@ async def list_documents(
     if type_filter:
         query = query.where(Document.document_type == type_filter)
 
-    # Total count
+    # Total count. `scalar` is typed Optional, and the arithmetic below would
+    # raise TypeError on None and turn the listing into a 500.
     count_query = select(func.count()).select_from(query.subquery())
-    total = await db.scalar(count_query)
+    total = await db.scalar(count_query) or 0
 
     # Paginated results
     query = query.order_by(desc(Document.created_at)).offset(
@@ -222,6 +222,8 @@ def _to_response(document: Document) -> DocumentResponse:
         error_message=document.error_message,
         processing_time_ms=document.processing_time_ms,
         webhook_status=document.webhook_status,
+        webhook_attempts=document.webhook_attempts or 0,
+        webhook_last_attempt=document.webhook_last_attempt,
         created_at=document.created_at,
         updated_at=document.updated_at,
         completed_at=document.completed_at,

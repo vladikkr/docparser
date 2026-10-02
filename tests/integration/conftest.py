@@ -7,10 +7,9 @@ Every test gets a fresh schema, so nothing leaks between them.
 from __future__ import annotations
 
 import os
-import tempfile
 import uuid
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -24,10 +23,11 @@ os.environ.setdefault("REDIS_URL", "")
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
-from app.core.security import generate_api_key, get_password_hash, hash_api_key  # noqa: E402
+from app.core.security import generate_api_key, get_password_hash  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import APIKey, User, UserTier  # noqa: E402
+from app.utils.helpers import utcnow  # noqa: E402
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test_integration.db"
 
@@ -101,7 +101,7 @@ async def test_api_key(db_session: AsyncSession, test_user: User) -> str:
             key_prefix=prefix,
             name="Test Key",
             is_active=True,
-            expires_at=datetime.utcnow() + timedelta(days=30),
+            expires_at=utcnow() + timedelta(days=30),
         )
     )
     await db_session.commit()

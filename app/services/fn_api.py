@@ -111,8 +111,10 @@ class FNSApiClient:
         # Items
         items = []
         for item in doc.get("items", []):
+            # The rate comes from whichever of the per-rate flags ФНС sent, and
+            # vat_sum below is read straight from ndsSum, so there is no need
+            # to resolve a combined amount here.
             vat_rate = None
-            nds = item.get("nds10") or item.get("nds18") or item.get("nds20")
             if item.get("nds20") is not None:
                 vat_rate = VATRate.VAT_20
             elif item.get("nds10") is not None:

@@ -2,7 +2,7 @@ from datetime import datetime
 
 import stripe
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,7 @@ from app.schemas import (
     SubscriptionResponse,
     UsageStats,
 )
+from app.utils.helpers import utcnow
 
 logger = structlog.get_logger()
 
@@ -120,8 +121,8 @@ async def get_subscription(
             id=user.id,
             tier=user.tier,
             status="active",
-            current_period_start=datetime.utcnow(),
-            current_period_end=datetime.utcnow(),
+            current_period_start=utcnow(),
+            current_period_end=utcnow(),
             cancel_at_period_end=False,
             documents_used=0,
             documents_limit=plan.documents_per_month,
@@ -220,8 +221,8 @@ async def get_usage_stats(
     from app.models import Document, DocumentStatus, UsageLog
 
     # Current period from subscription or default to month start
-    period_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    period_end = datetime.utcnow()
+    period_start = utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    period_end = utcnow()
 
     # Documents used
     docs_result = await db.execute(
@@ -234,7 +235,7 @@ async def get_usage_stats(
     docs_used = docs_result.scalar() or 0
 
     # API calls today
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     calls_today = await db.execute(
         select(func.count(UsageLog.id)).where(
             UsageLog.user_id == user.id,

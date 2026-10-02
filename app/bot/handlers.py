@@ -206,7 +206,9 @@ async def on_approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     client_id = int(raw_id)
 
     store = _store(context)
-    client = store.get(client_id)
+    # Touching the record keeps the stored profile current if the button was
+    # pressed long after the client wrote to the bot.
+    store.get(client_id)
 
     if action == "approve":
         store.approve(client_id, True)

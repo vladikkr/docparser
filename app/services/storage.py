@@ -10,9 +10,8 @@ only this module.
 from __future__ import annotations
 
 import logging
-import os
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -47,7 +46,7 @@ def _suffix(filename: str) -> str:
 
 def build_path(user_id: str, filename: str) -> str:
     """A collision-free, date-sharded relative path."""
-    day = datetime.now(timezone.utc).strftime("%Y/%m/%d")
+    day = datetime.now(UTC).strftime("%Y/%m/%d")
     unique = uuid4().hex[:8]
     safe_name = Path(filename).name
     return f"users/{user_id}/{day}/{unique}{_suffix(safe_name)}"

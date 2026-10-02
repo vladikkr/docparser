@@ -11,7 +11,6 @@ import asyncio
 import io
 import pathlib
 import sys
-import tempfile
 
 from PIL import Image, ImageDraw, ImageFont
 

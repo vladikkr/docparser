@@ -20,7 +20,15 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
+
+from defusedxml import ElementTree as defused_et
+from defusedxml.common import DefusedXmlException
+
+# Only the parsing entry points are defused. A malicious document is rejected
+# before any entity is expanded, which is the whole point.
+defused_fromstring = defused_et.fromstring
 
 # КНД codes published by ФНС.
 KND_INVOICE_LIKE = "1115131"  # УПД and СФ, seller title
@@ -102,19 +110,28 @@ def load_xml(file_bytes: bytes) -> ET.Element:
     """Parse a ФНС document, coping with the encoding and the appended signature.
 
     The declared encoding is honoured first because real files are windows-1251.
+
+    defusedxml is used rather than the standard library: this parses files that
+    clients upload, and ElementTree expands entities, so a document with nested
+    entity definitions can exhaust memory and take the worker down. The
+    standard parser here was a denial-of-service vector, not a style choice.
     """
     if not file_bytes.strip():
         raise FnsParseError("Пустой файл")
 
     try:
-        return ET.fromstring(file_bytes)
+        return defused_fromstring(file_bytes)
+    except DefusedXmlException as exc:
+        raise FnsParseError(f"Небезопасный XML отклонён: {exc}") from exc
     except ET.ParseError:
         pass
 
     # No usable declaration: try the encodings we actually see in the wild.
     for encoding in ("utf-8-sig", "utf-8", "cp1251"):
         try:
-            return ET.fromstring(file_bytes.decode(encoding))
+            return defused_fromstring(file_bytes.decode(encoding))
+        except DefusedXmlException as exc:
+            raise FnsParseError(f"Небезопасный XML отклонён: {exc}") from exc
         except (ET.ParseError, UnicodeDecodeError):
             continue
 
@@ -160,7 +177,12 @@ def parse_participant(element: ET.Element) -> dict[str, Any]:
     if element is None:
         return result
 
-    holder = direct_child(element, "ИдСв") or element
+    # An element's truth value is about its children, not its existence, so the
+    # fallback has to be an explicit None check. Relying on `or` worked by
+    # accident for leaf elements and warns on the way to breaking.
+    holder = direct_child(element, "ИдСв")
+    if holder is None:
+        holder = element
     organisation = direct_child(holder, "СвОрг")
     if organisation is not None:
         holder = organisation

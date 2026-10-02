@@ -50,6 +50,12 @@ class DocumentResponse(BaseModel):
     parsed_data: dict[str, Any] | None
     error_message: str | None
     processing_time_ms: int | None
+    # Added because the dispatcher already sets these and the endpoint already
+    # passed them in: Pydantic dropped the unknown keyword, so a client could
+    # never learn whether its webhook had been delivered.
+    webhook_status: str | None
+    webhook_attempts: int
+    webhook_last_attempt: datetime | None
     created_at: datetime
     updated_at: datetime
     completed_at: datetime | None

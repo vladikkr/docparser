@@ -7,7 +7,6 @@ the bad one is required to be reported.
 
 import importlib.util
 import pathlib
-import sys
 import tempfile
 
 spec = importlib.util.spec_from_file_location(

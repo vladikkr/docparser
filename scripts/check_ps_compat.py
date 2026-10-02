@@ -20,7 +20,6 @@ from __future__ import annotations
 import pathlib
 import subprocess
 import sys
-import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 BOM = b"\xef\xbb\xbf"

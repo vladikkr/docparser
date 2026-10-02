@@ -28,6 +28,7 @@ from app.schemas import (
     UserRegister,
     UserResponse,
 )
+from app.utils.helpers import utcnow
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -112,10 +113,9 @@ async def create_api_key(
 ):
     full_key, prefix, key_hash = generate_api_key()
 
-    from datetime import datetime
     expires_at = None
     if key_data.expires_in_days:
-        expires_at = datetime.utcnow() + timedelta(days=key_data.expires_in_days)
+        expires_at = utcnow() + timedelta(days=key_data.expires_in_days)
 
     api_key = APIKey(
         user_id=user.id,

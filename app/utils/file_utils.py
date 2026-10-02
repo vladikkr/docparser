@@ -3,7 +3,8 @@
 import io
 import os
 import uuid
-from datetime import datetime
+
+from app.utils.helpers import utcnow
 
 ALLOWED_MIME_TYPES = {
     "application/pdf": [".pdf"],
@@ -71,7 +72,7 @@ def save_upload_file(file_bytes: bytes, path: str) -> None:
 
 def generate_storage_path(user_id: str, filename: str) -> str:
     """Generate storage path for uploaded file"""
-    date_path = datetime.utcnow().strftime("%Y/%m/%d")
+    date_path = utcnow().strftime("%Y/%m/%d")
     unique_id = uuid.uuid4().hex[:8]
     ext = filename.rsplit(".", 1)[-1] if "." in filename else "bin"
     return f"users/{user_id}/{date_path}/{unique_id}.{ext}"

@@ -45,7 +45,7 @@ def parse_document_task(self, document_id: str):
         logger.warning("parse_task_retry", document_id=document_id, error=str(exc))
         if self.request.retries >= self.max_retries:
             raise
-        raise self.retry(exc=exc, countdown=2**self.request.retries * 60)
+        raise self.retry(exc=exc, countdown=2**self.request.retries * 60) from exc
 
 
 async def _parse_document_async(document_id: str):
@@ -100,7 +100,7 @@ async def _parse_document_async(document_id: str):
             document.parsed_data = json.dumps(parsed_data, ensure_ascii=False)
             document.status = DocumentStatus.COMPLETED
             document.processing_time_ms = processing_time
-            document.completed_at = datetime.utcnow()
+            document.completed_at = utcnow()
             await session.commit()
 
             # Dispatch webhook
@@ -157,4 +157,5 @@ async def _retry_failed_async():
         return {"retried": len(documents)}
 
 
-from datetime import datetime
+
+from app.utils.helpers import utcnow

@@ -4,18 +4,14 @@ Heavy dependencies (opencv, pillow, tesseract bindings) are optional so the API
 can boot on constrained hosts. Import errors surface only when OCR is used.
 """
 
-import io
 import os
 import re
 import shutil
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
-
-from PIL import Image
+from typing import Any
 
 import structlog
-
-from app.config import settings
+from PIL import Image
 
 logger = structlog.get_logger()
 
@@ -277,12 +273,12 @@ class OCRService:
         except Exception:
             return image
 
-    def pdf_to_images(self, pdf_bytes: bytes) -> List[Any]:
+    def pdf_to_images(self, pdf_bytes: bytes) -> list[Any]:
         """Convert PDF pages to images. Requires poppler-utils."""
         convert = _optional_import("pdf2image", "PDF conversion").convert_from_bytes
         return convert(pdf_bytes, dpi=300, fmt="PNG")
 
-    def extract_text(self, image: Any) -> List[Tuple[str, float, List[List[int]]]]:
+    def extract_text(self, image: Any) -> list[tuple[str, float, list[list[int]]]]:
         """Return (text, confidence, bbox) tuples for an image."""
         pytesseract = _optional_import("pytesseract", "OCR")
         _configure_pytesseract(pytesseract)
@@ -297,7 +293,7 @@ class OCRService:
             logger.error("ocr_failed", error=str(exc))
             raise
 
-        results: List[Tuple[str, float, List[List[int]]]] = []
+        results: list[tuple[str, float, list[list[int]]]] = []
         for i in range(len(data["level"])):
             text = (data["text"][i] or "").strip()
             if not text:
@@ -310,7 +306,7 @@ class OCRService:
             results.append((text, confidence, bbox))
         return results
 
-    def extract_text_from_pdf(self, pdf_bytes: bytes) -> List[List[Tuple[str, float, List[List[int]]]]]:
+    def extract_text_from_pdf(self, pdf_bytes: bytes) -> list[list[tuple[str, float, list[list[int]]]]]:
         return [self.extract_text(img) for img in self.pdf_to_images(pdf_bytes)]
 
     def extract_full_text_from_pdf(self, pdf_bytes: bytes) -> str:

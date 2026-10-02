@@ -6,7 +6,6 @@ the token except the parsing itself, which is already covered elsewhere.
 
 from __future__ import annotations
 
-import json
 import os
 
 import pytest
@@ -194,23 +193,6 @@ async def test_a_fixed_format_is_parsed_not_declared_pending():
 
     assert outcome.ok
     assert "в разработке" not in render(outcome)
-
-
-def test_a_pending_format_is_honest_about_not_being_ready():
-    # A чек самозанятого is a printout from "Мой налог", not an XML format, so
-    # there is deliberately no fixture for it: the message is what matters.
-    outcome = Outcome(
-        ok=False,
-        doc_type="selfemployed",
-        label="Чек самозанятого",
-        source="fallback",
-        error="not_implemented",
-        note="Чек самозанятого: формат принят, но парсер ещё не доведён до продакшена.",
-    )
-
-    assert outcome.pending
-    assert "не доведён" in render(outcome)
-    assert "не буду выдумывать цифры" in render(outcome)
 
 
 def test_every_document_type_the_bot_advertises_has_a_parser():

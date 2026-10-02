@@ -99,7 +99,7 @@ def _payload_from_qr(qr: str, warning: str) -> dict:
 
 
 async def _parse(path: pathlib.Path, raw_text: bool) -> dict:
-    from app.services.fn_api import FNSApiError, fns_client, validate_receipt_by_qr
+    from app.services.fn_api import FNSApiError, validate_receipt_by_qr
     from app.services.ocr import ocr_service
 
     data = path.read_bytes()

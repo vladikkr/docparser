@@ -24,9 +24,14 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # (name, script, slow?)
 CHECKS: list[tuple[str, str, bool]] = [
     ("unit tests", "-m pytest -q -p no:cacheprovider", False),
+    ("lint defects", "scripts/check_lint.py", False),
+    ("tests not shadowed", "scripts/check_test_shadowing.py", False),
+    ("secrets", "scripts/check_secrets.py", False),
+    ("guards catch defects", "scripts/check_guards_work.py", False),
     ("imports declared", "scripts/check_requirements.py", False),
     ("python 3.12 compatibility", "scripts/check_py312_compat.py", False),
     ("powershell 5.1 compatibility", "scripts/check_ps_compat.py", False),
+    ("xml hardening", "scripts/check_xml_hardening.py", False),
     ("landing page", "scripts/check_landing.py", False),
     ("hand-off paths", "scripts/check_docs_paths.py", False),
     ("prices agree across docs", "scripts/check_prices.py", False),

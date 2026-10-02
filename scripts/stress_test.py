@@ -13,7 +13,6 @@ import io
 import pathlib
 import sys
 
-import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))

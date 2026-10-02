@@ -9,6 +9,7 @@ from app.core.exceptions import AuthenticationError, AuthorizationError
 from app.core.security import decode_token, hash_api_key
 from app.database import get_db
 from app.models import APIKey, User, UserTier
+from app.utils.helpers import utcnow
 
 
 async def get_current_user(
@@ -85,8 +86,7 @@ async def get_api_key_user(
     api_key, user = row
 
     # Update last used
-    from datetime import datetime
-    api_key.last_used_at = datetime.utcnow()
+    api_key.last_used_at = utcnow()
     await db.commit()
 
     # Attach to request state

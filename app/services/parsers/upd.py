@@ -25,14 +25,12 @@ from app.services.parsers.fns_xml import (
     direct_child,
     document_root,
     find_first,
-    function_of,
     knd_of,
     load_xml,
     localname,
     parse_currency,
     parse_participant,
     parse_tax_amount,
-    text_of,
     to_number,
 )
 

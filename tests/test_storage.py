@@ -102,7 +102,13 @@ class TestParsedDataSerialisation:
             parsed_data=parsed_data,
             error_message=None,
             processing_time_ms=42,
+            # The fake must carry every column _to_response reads. It had
+            # webhook_status only, so adding the delivery fields to the
+            # response raised AttributeError here and the test failed for a
+            # reason that had nothing to do with what it was checking.
             webhook_status=None,
+            webhook_attempts=0,
+            webhook_last_attempt=None,
             created_at=now,
             updated_at=now,
             completed_at=now,

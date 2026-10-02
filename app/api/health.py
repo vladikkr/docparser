@@ -1,4 +1,3 @@
-from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
@@ -7,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.rate_limit import get_redis
 from app.database import get_db
+from app.utils.helpers import utcnow
 
 router = APIRouter(tags=["health"])
 
@@ -36,7 +36,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         "database": database,
         "redis": redis,
         "celery": settings.CELERY_ENABLED,
-        "timestamp": datetime.utcnow(),
+        "timestamp": utcnow(),
     }
 
 

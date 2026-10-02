@@ -1,6 +1,19 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+
+
+def utcnow() -> datetime:
+    """Current UTC time as a naive datetime.
+
+    Every `DateTime` column in this project is timezone-naive, so storing an
+    aware value would make SQLAlchemy and SQLite disagree about what a naive
+    timestamp means. This keeps the naive-UTC convention in one place.
+
+    `datetime.utcnow()` is deprecated and slated for removal, and it was called
+    in eleven places that all wanted exactly this function.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def generate_idempotency_key(prefix: str = "") -> str:

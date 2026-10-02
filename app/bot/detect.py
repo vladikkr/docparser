@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import io
 import re
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
 from app.services.parsers.fns_xml import (
@@ -23,12 +22,10 @@ from app.services.parsers.fns_xml import (
     KND_INVOICE_LIKE,
     KND_INVOICE_LIKE_BUYER,
     KND_TORG12,
-    document_root,
-    find_first,
+    FnsParseError,
     function_of,
     knd_of,
     load_xml,
-    FnsParseError,
 )
 
 # `Функция` values for the correction formats.

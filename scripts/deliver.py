@@ -11,7 +11,6 @@ file, and prints a message that can be pasted into Telegram as-is.
 from __future__ import annotations
 
 import argparse
-import asyncio
 import io
 import json
 import pathlib

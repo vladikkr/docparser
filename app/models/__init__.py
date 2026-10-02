@@ -9,13 +9,12 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import declared_attr, relationship
+from sqlalchemy.orm import relationship
 
 from app.database import Base
 

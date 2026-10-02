@@ -34,10 +34,10 @@ async def stripe_webhook(
         )
     except ValueError as e:
         logger.error("stripe_webhook_invalid_payload", error=str(e))
-        raise HTTPException(status_code=400, detail="Invalid payload")
+        raise HTTPException(status_code=400, detail="Invalid payload") from e
     except stripe.error.SignatureVerificationError as e:
         logger.error("stripe_webhook_invalid_signature", error=str(e))
-        raise HTTPException(status_code=400, detail="Invalid signature")
+        raise HTTPException(status_code=400, detail="Invalid signature") from e
 
     logger.info("stripe_webhook_received", event_type=event.type, event_id=event.id)
 

@@ -1,11 +1,13 @@
+import hashlib
+import hmac
 import json
-from datetime import datetime
 
 import httpx
 import structlog
 
 from app.config import settings
 from app.models import Document, DocumentStatus
+from app.utils.helpers import utcnow
 
 logger = structlog.get_logger()
 
@@ -20,7 +22,7 @@ async def dispatch_document_webhook(document: Document) -> bool:
 
     payload = {
         "event": "document.parsed",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utcnow().isoformat(),
         "document": {
             "id": str(document.id),
             "filename": document.filename,
@@ -33,12 +35,18 @@ async def dispatch_document_webhook(document: Document) -> bool:
         },
     }
 
+    # Sign the exact bytes that go on the wire. The payload used to be signed
+    # after one re-serialisation while httpx serialised it again on the way out,
+    # so the two byte strings differed and the verification documented in
+    # docs/webhook_guide.md, which uses the raw request body, never matched.
+    body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "DocParser.ru Webhook/1.0",
         "X-DocParser-Event": "document.parsed",
         "X-DocParser-Document-ID": str(document.id),
-        "X-DocParser-Signature": _generate_signature(payload),
+        "X-DocParser-Signature": sign_body(body),
     }
 
     for attempt in range(settings.WEBHOOK_MAX_RETRIES):
@@ -46,14 +54,14 @@ async def dispatch_document_webhook(document: Document) -> bool:
             async with httpx.AsyncClient(timeout=settings.WEBHOOK_TIMEOUT) as client:
                 response = await client.post(
                     document.webhook_url,
-                    json=payload,
+                    content=body,
                     headers=headers,
                 )
                 response.raise_for_status()
 
                 document.webhook_status = "delivered"
                 document.webhook_attempts = attempt + 1
-                document.webhook_last_attempt = datetime.utcnow()
+                document.webhook_last_attempt = utcnow()
                 logger.info("webhook_delivered", document_id=str(document.id), attempt=attempt + 1)
                 return True
 
@@ -80,23 +88,30 @@ async def dispatch_document_webhook(document: Document) -> bool:
 
     document.webhook_status = "failed"
     document.webhook_attempts = settings.WEBHOOK_MAX_RETRIES
-    document.webhook_last_attempt = datetime.utcnow()
+    document.webhook_last_attempt = utcnow()
     logger.error("webhook_failed_after_retries", document_id=str(document.id))
     return False
 
 
-def _generate_signature(payload: dict) -> str:
-    """Generate HMAC signature for webhook verification"""
-    import hashlib
-    import hmac
+def sign_body(body: bytes) -> str:
+    """HMAC-SHA256 of the exact request body, as documented for customers.
 
-    secret = settings.STRIPE_WEBHOOK_SECRET  # Reuse secret or add dedicated one
-    payload_bytes = json.dumps(payload, sort_keys=True).encode()
-    signature = hmac.new(secret.encode(), payload_bytes, hashlib.sha256).hexdigest()
-    return f"sha256={signature}"
+    Customers verify against the raw body they received, so this must take
+    bytes rather than a dict: re-serialising a dict here is how the signature
+    and the body drifted apart in the first place.
+    """
+    secret = settings.WEBHOOK_SIGNING_SECRET
+    return "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+def _generate_signature(payload: dict) -> str:
+    """Sign a payload dict. Kept for the docs and for tests."""
+    body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    return sign_body(body)
 
 
 async def verify_webhook_signature(payload: bytes, signature: str) -> bool:
-    """Verify incoming webhook signature"""
-    expected = _generate_signature(json.loads(payload))
-    return hmac.compare_digest(expected, signature)
+    """Verify a signature against the raw request body."""
+    if not signature or not signature.startswith("sha256="):
+        return False
+    return hmac.compare_digest(sign_body(payload), signature)

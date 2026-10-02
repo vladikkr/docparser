@@ -11,6 +11,11 @@ dependencies = []
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# The `lint` section, not the top level: the top-level `select` is deprecated
+# and ruff warned it was being ignored, so the configured rules were never
+# actually applied.
 select = ["E", "F", "I", "W", "UP", "B", "C4", "SIM", "T20"]
 ignore = ["S101", "S106", "B008", "E501"]
 

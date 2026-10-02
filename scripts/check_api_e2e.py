@@ -26,7 +26,6 @@ from app.core.security import generate_api_key, get_password_hash  # noqa: E402
 from app.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import APIKey, User, UserTier  # noqa: E402
-from app.services import storage  # noqa: E402
 
 RECEIPT = pathlib.Path(r"C:\Users\vladk\Downloads\1.png.jpg")
 
